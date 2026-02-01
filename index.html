@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- 基础信息 -->
+    <title>无限之门 | AI Roguelike 冒险</title>
+    <meta name="description" content="一款由 AI 生成的无限流地牢爬行游戏。每次推开门，都是全新的平行宇宙。" />
+    
+    <!-- PWA / 移动端体验优化 -->
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <link rel="apple-touch-icon" href="https://api.dicebear.com/7.x/pixel-art/svg?seed=icon&backgroundColor=1e293b" />
+
+    <!-- 直接使用 Tailwind CDN (避免复杂的构建配置) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+      
+      body {
+        background-color: #0f172a;
+        color: #e2e8f0;
+        font-family: 'Space Mono', monospace;
+        overscroll-behavior: none;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: transparent;
+      }
+      
+      .pixel-font {
+        font-family: 'Press Start 2P', cursive;
+      }
+      
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+        background: transparent;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1e293b; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #475569; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #64748b; 
+      }
+      
+      .scanline {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+        background-size: 100% 4px;
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.15;
+      }
+      
+      .animate-fade-in { animation: fadeIn 0.5s ease-out; }
+      .animate-bounce-in { animation: bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+      
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes bounceIn {
+        0% { opacity: 0; transform: scale(0.3) translateY(10px); }
+        50% { opacity: 1; transform: scale(1.05) translateY(-2px); }
+        70% { transform: scale(0.9); }
+        100% { transform: scale(1); }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div class="scanline"></div>
+    <!-- 这里的 type="module" 是关键，Vite 构建必须依赖它 -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

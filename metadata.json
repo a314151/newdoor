@@ -1,0 +1,5 @@
+{
+  "name": "无限之门",
+  "description": "一款Roguelike地牢爬行游戏，每次打开门，主题、敌人和技能都会由AI生成。体验无限的平行宇宙。",
+  "requestFramePermissions": []
+}
