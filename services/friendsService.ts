@@ -35,13 +35,14 @@ class FriendsService {
       
       // 保存好友申请到数据库
       const { error } = await supabase
-        .from('friend_requests')
+        .from('friend_relationships')
         .insert({
           id: requestId,
-          sender_id: currentUserId,
-          receiver_id: friendId,
+          user_id: currentUserId,
+          friend_id: friendId,
           status: 'pending',
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
       
       if (error) {
@@ -110,8 +111,8 @@ class FriendsService {
       
       // 更新好友申请状态为已接受
       const { error: updateError } = await supabase
-        .from('friend_requests')
-        .update({ status: 'accepted' })
+        .from('friend_relationships')
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
         .eq('id', requestId);
       
       if (updateError) {
@@ -149,8 +150,8 @@ class FriendsService {
     try {
       // 更新好友申请状态为已拒绝
       const { error } = await supabase
-        .from('friend_requests')
-        .update({ status: 'rejected' })
+        .from('friend_relationships')
+        .update({ status: 'rejected', updated_at: new Date().toISOString() })
         .eq('id', requestId);
       
       if (error) {
@@ -270,12 +271,12 @@ class FriendsService {
   static async getFriendRequests(userId: string): Promise<FriendRequest[]> {
     try {
       const { data: requestsData, error } = await supabase
-        .from('friend_requests')
+        .from('friend_relationships')
         .select(`
           id, status, created_at,
-          sender:profiles!friend_requests_sender_id_fkey(id, email, created_at)
+          sender:profiles!friend_relationships_user_id_fkey(id, email, created_at)
         `)
-        .eq('receiver_id', userId)
+        .eq('friend_id', userId)
         .eq('status', 'pending');
       
       if (!error && requestsData) {
