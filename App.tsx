@@ -298,10 +298,44 @@ const App: React.FC = () => {
   // 当currentUserId变化时，重新初始化邮件系统
   useEffect(() => {
     // 确保只有在currentUserId或isDataLoaded变化时才运行
-    if (isDataLoaded) {
+    if (isDataLoaded && currentUserId) {
       initEmailSystem();
+      // 启动实时通知监听
+      startNotificationListener(currentUserId);
     }
   }, [currentUserId, isDataLoaded]);
+  
+  // 启动实时通知监听
+  const startNotificationListener = (userId: string) => {
+    if (!isSupabaseConfigured()) return;
+    
+    try {
+      // 监听notifications表的变化
+      const { data: { subscription } } = supabase
+        .channel('public:notifications')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`
+        }, (payload) => {
+          console.log('收到新通知:', payload);
+          const notification = payload.new;
+          
+          // 在游戏界面上显示通知
+          addToast(notification.message, 'info');
+          
+          // 刷新邮件列表，确保新的好友申请邮件显示出来
+          initEmailSystem();
+        })
+        .subscribe();
+      
+      console.log('实时通知监听已启动');
+      return () => subscription.unsubscribe();
+    } catch (error) {
+      console.error('启动实时通知监听失败:', error);
+    }
+  };
 
   useEffect(() => { localStorage.setItem('inf_stats', JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem('inf_profile', JSON.stringify(userProfile)); }, [userProfile]);

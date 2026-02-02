@@ -55,11 +55,44 @@ class FriendsService {
       // 保存邮件到对方的localStorage
       this.saveEmailToLocalStorage(friendId, friendRequestEmail);
       
-      console.log(`成功向用户 ${friendUserData.email} 发送好友申请邮件`);
+      // 使用Supabase实时功能发送通知
+      await this.sendRealTimeNotification(friendId, {
+        type: 'friend_request',
+        message: `${currentUserData.email.split('@')[0]} 向你发送了好友申请`,
+        senderId: currentUserId,
+        senderName: currentUserData.email.split('@')[0],
+        timestamp: Date.now()
+      });
+      
+      console.log(`成功向用户 ${friendUserData.email} 发送好友申请通知`);
       return true;
     } catch (error) {
       console.error('发送好友申请通知失败:', error);
       return false;
+    }
+  }
+  
+  // 发送实时通知
+  private static async sendRealTimeNotification(userId: string, notification: any): Promise<void> {
+    try {
+      // 使用Supabase的functions或realtime功能发送通知
+      // 这里我们创建一个临时的通知表来存储实时通知
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: userId,
+          type: notification.type,
+          message: notification.message,
+          data: notification,
+          read: false,
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        console.error('发送实时通知失败:', error);
+      }
+    } catch (error) {
+      console.error('发送实时通知失败:', error);
     }
   }
   
