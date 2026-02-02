@@ -128,13 +128,17 @@ class AnnouncementService {
       if (isSupabaseConfigured()) {
         const { error } = await supabase
           .from('user_announcement_read')
-          .upsert({
-            user_id: userId,
-            announcement_id: id,
-            is_read: true,
-            read_at: new Date().toISOString()
-          })
-          .onConflict('user_id,announcement_id');
+          .upsert(
+            {
+              user_id: userId,
+              announcement_id: id,
+              is_read: true,
+              read_at: new Date().toISOString()
+            },
+            {
+              onConflict: 'user_id,announcement_id'
+            }
+          );
 
         if (error) {
           console.error('Failed to mark announcement as read in Supabase:', error);
@@ -188,8 +192,12 @@ class AnnouncementService {
         if (readRecords.length > 0) {
           const { error } = await supabase
             .from('user_announcement_read')
-            .upsert(readRecords)
-            .onConflict('user_id,announcement_id');
+            .upsert(
+              readRecords,
+              {
+                onConflict: 'user_id,announcement_id'
+              }
+            );
 
           if (error) {
             console.error('Failed to mark all announcements as read in Supabase:', error);
