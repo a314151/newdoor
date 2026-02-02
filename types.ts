@@ -280,6 +280,7 @@ export interface Email {
   timestamp: number;
   sender?: string;
   friendRequest?: FriendRequestInfo;
+  isInitialEmail?: boolean;
 }
 
 declare global {

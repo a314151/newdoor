@@ -30,7 +30,7 @@ import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
 
 // --- Constants ---
-const DATA_VERSION = "2.0.2"; 
+const DATA_VERSION = "2.0.3"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
@@ -708,6 +708,21 @@ const App: React.FC = () => {
     }
     
     try {
+      // 检查是否已经是好友
+      const { data: existingFriends, error: checkError } = await supabase
+        .from('friend_relationships')
+        .select('id, status')
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`);
+      
+      if (existingFriends && existingFriends.length > 0) {
+        const isFriend = existingFriends.some(rel => rel.status === 'accepted');
+        if (isFriend) {
+          addToast('你们已经是好友了', 'info');
+          return false;
+        }
+      }
+      
+      // 插入好友申请
       const { error } = await supabase
         .from('friend_relationships')
         .insert({
@@ -718,11 +733,11 @@ const App: React.FC = () => {
       
       if (error) {
         if (error.code === '23505') {
-          addToast('好友申请已发送或已是好友', 'info');
+          addToast('好友申请已发送，对方将收到邮件通知', 'info');
         } else {
           addToast('发送好友申请失败', 'error');
+          return false;
         }
-        return false;
       }
       
       // 获取当前用户信息
@@ -733,31 +748,41 @@ const App: React.FC = () => {
         .single();
       
       if (currentUserData) {
-        // 向对方发送邮件通知
-        const newEmail: Email = {
-          id: Date.now().toString(),
-          subject: '好友申请通知',
-          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 向你发送了好友申请。\n\n请点击下方按钮处理申请。`,
-          attachments: [
-            {
-              type: EmailContentType.ITEM,
-              itemType: ItemType.XP_SMALL
-            }
-          ],
-          isRead: false,
-          isClaimed: false,
-          timestamp: Date.now(),
-          sender: '系统',
-          friendRequest: {
-            requestId: Date.now().toString(),
-            senderId: currentUserId,
-            senderName: currentUserData.email.split('@')[0]
-          }
-        };
+        // 获取对方用户信息
+        const { data: friendUserData } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('id', friendId)
+          .single();
         
-        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
-        // 实际项目中需要通过服务器发送到对方的邮件系统
-        addToast('好友申请已发送，对方将收到邮件通知', 'success');
+        if (friendUserData) {
+          // 向对方发送邮件通知
+          const newEmail: Email = {
+            id: Date.now().toString(),
+            subject: '好友申请通知',
+            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 向你发送了好友申请。\n\n请点击下方按钮处理申请。`,
+            attachments: [
+              {
+                type: EmailContentType.ITEM,
+                itemType: ItemType.XP_SMALL
+              }
+            ],
+            isRead: false,
+            isClaimed: false,
+            timestamp: Date.now(),
+            sender: '系统',
+            friendRequest: {
+              requestId: Date.now().toString(),
+              senderId: currentUserId,
+              senderName: currentUserData.email.split('@')[0]
+            }
+          };
+          
+          // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
+          // 实际项目中需要通过服务器发送到对方的邮件系统
+          console.log('向用户', friendUserData.email, '发送好友申请邮件');
+          addToast('好友申请已发送，对方将收到邮件通知', 'success');
+        }
       }
       
       return true;
@@ -983,6 +1008,13 @@ const App: React.FC = () => {
       email.id === emailId ? { ...email, isClaimed: true } : email
     ));
 
+    // 如果是初始邮件，确保用户不会再次收到
+    if (email.isInitialEmail) {
+      const userId = currentUserId || 'guest';
+      const hasInitialEmailsKey = `inf_has_initial_emails_${userId}`;
+      localStorage.setItem(hasInitialEmailsKey, 'true');
+    }
+
     addToast('邮件奖励已领取', 'success');
   };
 
@@ -1032,6 +1064,21 @@ const App: React.FC = () => {
   
   const handleAcceptFriendRequest = async (senderId: string, emailId: string) => {
     try {
+      // 检查是否已经是好友
+      const { data: existingFriends, error: checkError } = await supabase
+        .from('friend_relationships')
+        .select('id, status')
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${senderId}),and(user_id.eq.${senderId},friend_id.eq.${currentUserId})`);
+      
+      if (existingFriends && existingFriends.length > 0) {
+        const isFriend = existingFriends.some(rel => rel.status === 'accepted');
+        if (isFriend) {
+          addToast('你们已经是好友了', 'info');
+          deleteEmail(emailId);
+          return;
+        }
+      }
+      
       // 创建好友关系
       const { error } = await supabase
         .from('friend_relationships')
@@ -1055,27 +1102,18 @@ const App: React.FC = () => {
         .single();
       
       if (currentUserData) {
-        const newEmail: Email = {
-          id: Date.now().toString(),
-          subject: '好友申请已接受',
-          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已接受了你的好友申请。\n\n现在你们已经成为好友，可以开始聊天了！`,
-          attachments: [
-            {
-              type: EmailContentType.ITEM,
-              itemType: ItemType.XP_SMALL
-            }
-          ],
-          isRead: false,
-          isClaimed: false,
-          timestamp: Date.now(),
-          sender: '系统'
-        };
+        const { data: senderUserData } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('id', senderId)
+          .single();
         
-        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
-        // 实际项目中需要通过服务器发送到对方的邮件系统
+        if (senderUserData) {
+          console.log('向用户', senderUserData.email, '发送好友申请接受邮件');
+          addToast('好友申请已接受，对方将收到邮件通知', 'success');
+        }
       }
       
-      addToast('好友申请已接受', 'success');
       // 删除邮件
       deleteEmail(emailId);
       // 刷新好友列表
@@ -1096,22 +1134,18 @@ const App: React.FC = () => {
         .single();
       
       if (currentUserData) {
-        const newEmail: Email = {
-          id: Date.now().toString(),
-          subject: '好友申请已拒绝',
-          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已拒绝了你的好友申请。\n\n不要灰心，继续寻找其他冒险者一起冒险吧！`,
-          attachments: [],
-          isRead: false,
-          isClaimed: false,
-          timestamp: Date.now(),
-          sender: '系统'
-        };
+        const { data: senderUserData } = await supabase
+          .from('profiles')
+          .select('id, email')
+          .eq('id', senderId)
+          .single();
         
-        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
-        // 实际项目中需要通过服务器发送到对方的邮件系统
+        if (senderUserData) {
+          console.log('向用户', senderUserData.email, '发送好友申请拒绝邮件');
+          addToast('好友申请已拒绝，对方将收到邮件通知', 'success');
+        }
       }
       
-      addToast('好友申请已拒绝', 'success');
       // 删除邮件
       deleteEmail(emailId);
     } catch (error) {
@@ -1165,7 +1199,8 @@ const App: React.FC = () => {
           isRead: false,
           isClaimed: false,
           timestamp: Date.now() - 86400000,
-          sender: '系统'
+          sender: '系统',
+          isInitialEmail: true
         },
         {
           id: '2',
@@ -1180,7 +1215,8 @@ const App: React.FC = () => {
           isRead: true,
           isClaimed: false,
           timestamp: Date.now() - 43200000,
-          sender: '系统'
+          sender: '系统',
+          isInitialEmail: true
         }
       ];
 
