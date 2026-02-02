@@ -1,117 +1,156 @@
 import { supabase } from './supabaseClient';
 import { Friend, FriendRequest } from '../types';
 
-// 定义数据库查询返回的原始数据结构，告别 any
-interface DBFriendRelationship {
-  id: string;
-  user_id: string;
-  friend_id: string;
-  status: string;
-  updated_at: string;
-  sender: { id: string; email: string } | null;
-  receiver: { id: string; email: string } | null;
-}
-
 class FriendsService {
-  // 1. 获取用户好友列表 (采用更标准的关联语法)
+  // 1. 获取好友列表：修复查询逻辑，确保正确获取双向好友关系
   static async getFriends(userId: string): Promise<Friend[]> {
     try {
+      console.log('正在获取用户好友列表，UID:', userId);
+
+      // 使用正确的Supabase语法查询双向好友关系
       const { data, error } = await supabase
         .from('friend_relationships')
-        .select(`
-          id, user_id, friend_id, status, updated_at,
-          sender:profiles!user_id(id, email),
-          receiver:profiles!friend_id(id, email)
-        `)
+        .select('*')
         .eq('status', 'accepted')
         .or(`user_id.eq.${userId},friend_id.eq.${userId}`);
 
-      if (error) throw error;
+      if (error) {
+        console.error('获取好友列表查询错误:', error);
+        throw error;
+      }
+
+      console.log('数据库返回的原始好友数据:', data);
 
       const friendsMap = new Map<string, Friend>();
 
-      (data as unknown as DBFriendRelationship[])?.forEach((rel) => {
-        const isMeSender = rel.user_id === userId;
-        const target = isMeSender ? rel.receiver : rel.sender;
+      // 获取所有好友的用户信息
+      if (data && data.length > 0) {
+        // 提取所有好友ID
+        const friendIds = new Set<string>();
+        data.forEach(rel => {
+          if (rel.user_id === userId) {
+            friendIds.add(rel.friend_id);
+          } else {
+            friendIds.add(rel.user_id);
+          }
+        });
 
-        // 严格检查 target 是否存在
-        if (target) {
-          const username = target.email?.split('@')[0] || '未知用户';
-          friendsMap.set(target.id, {
-            id: target.id,
-            email: target.email,
-            username: username,
-            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${target.id}`,
-            lastActive: new Date(rel.updated_at).getTime(),
-            isOnline: false,
-            unreadCount: 0
-          });
+        // 批量获取好友的用户信息
+        if (friendIds.size > 0) {
+          const { data: profiles, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, email')
+            .in('id', Array.from(friendIds));
+
+          if (profileError) {
+            console.error('获取好友用户信息错误:', profileError);
+          } else if (profiles) {
+            // 创建用户信息映射
+            const profileMap = new Map<string, any>();
+            profiles.forEach(profile => {
+              profileMap.set(profile.id, profile);
+            });
+
+            // 构建好友列表
+            data.forEach(rel => {
+              let friendId: string;
+              if (rel.user_id === userId) {
+                friendId = rel.friend_id;
+              } else {
+                friendId = rel.user_id;
+              }
+
+              const profile = profileMap.get(friendId);
+              if (profile) {
+                friendsMap.set(friendId, {
+                  id: profile.id,
+                  email: profile.email,
+                  username: profile.email.split('@')[0],
+                  avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${profile.id}`,
+                  lastActive: new Date(rel.updated_at).getTime(),
+                  isOnline: false,
+                  unreadCount: 0
+                });
+              }
+            });
+          }
         }
-      });
-      return Array.from(friendsMap.values());
+      }
+
+      const result = Array.from(friendsMap.values());
+      console.log('处理后的好友列表:', result);
+      return result;
     } catch (error) {
-      console.error('获取好友列表失败:', error);
+      console.error('获取好友列表异常:', error);
       return [];
     }
   }
 
-  // 2. 接受好友申请 (增加严谨的错误处理)
-  static async acceptFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
-    try {
-      const { error: updateError } = await supabase
-        .from('friend_relationships')
-        .update({
-          status: 'accepted',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', requestId);
-
-      if (updateError) throw updateError;
-
-      await this.sendFriendRequestAcceptedNotification(currentUserId, senderId);
-      return true;
-    } catch (error) {
-      console.error('接受好友申请失败:', error);
-      return false;
-    }
-  }
-
-  // 3. 发送好友申请 (修复了 split 可能崩溃的问题)
+  // 2. 发送好友申请：修复状态检查逻辑
   static async sendFriendRequestNotification(currentUserId: string, friendId: string): Promise<boolean> {
     try {
-      const { data: userData } = await supabase.from('profiles').select('email').eq('id', currentUserId).single();
+      console.log('发送好友申请:', currentUserId, '->', friendId);
 
-      // 前置检查
-      if (!userData?.email) {
-        console.error('无法获取发送者信息');
-        return false;
+      // 1. 先检查是否已经是好友或已经有申请了（双向检查）
+      const { data: existingRelations, error: checkError } = await supabase
+        .from('friend_relationships')
+        .select('status')
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`);
+
+      if (checkError) {
+        console.error('检查好友关系错误:', checkError);
+      } else if (existingRelations && existingRelations.length > 0) {
+        // 检查是否有已接受的关系
+        const isFriend = existingRelations.some(rel => rel.status === 'accepted');
+        if (isFriend) {
+          console.log('已经是好友了');
+          return false;
+        }
+        // 检查是否有待处理的申请
+        const hasPending = existingRelations.some(rel => rel.status === 'pending');
+        if (hasPending) {
+          console.log('申请已发送，请耐心等待对方同意');
+          return false;
+        }
       }
 
+      // 2. 获取发送者信息
+      const { data: userData } = await supabase.from('profiles').select('email').eq('id', currentUserId).single();
+      if (!userData?.email) {
+        console.error('获取发送者信息失败');
+        return false;
+      }
       const senderName = userData.email.split('@')[0];
 
+      // 3. 执行申请逻辑
       const { data, error } = await supabase
         .from('friend_relationships')
         .upsert(
-          {
-            user_id: currentUserId,
-            friend_id: friendId,
-            status: 'pending',
-            updated_at: new Date().toISOString()
+          { 
+            user_id: currentUserId, 
+            friend_id: friendId, 
+            status: 'pending', 
+            updated_at: new Date().toISOString() 
           },
           { onConflict: 'user_id, friend_id' }
         )
         .select('id').single();
 
-      if (error || !data) throw error;
+      if (error || !data) {
+        console.error('创建好友申请失败:', error);
+        throw error;
+      }
 
-      await this.sendRealTimeNotification(friendId, {
+      // 4. 发送通知
+      await supabase.from('notifications').insert({
+        user_id: friendId,
         type: 'friend_request',
         message: `${senderName} 向你发送了好友申请`,
-        senderId: currentUserId,
-        senderName: senderName,
-        requestId: data.id
+        data: { senderId: currentUserId, senderName, requestId: data.id },
+        read: false
       });
 
+      console.log('好友申请发送成功:', data.id);
       return true;
     } catch (error) {
       console.error('申请失败:', error);
@@ -119,63 +158,189 @@ class FriendsService {
     }
   }
 
-  // 4. 获取待处理申请
+  // 3. 接受好友申请：修复逻辑，确保正确创建双向好友关系
+  static async acceptFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
+    try {
+      console.log('接受好友申请:', senderId, '->', currentUserId);
+
+      // 1. 更新申请状态为已接受
+      const { error: updateError } = await supabase
+        .from('friend_relationships')
+        .update({ 
+          status: 'accepted', 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', requestId);
+
+      if (updateError) {
+        console.error('更新好友申请状态失败:', updateError);
+        throw updateError;
+      }
+
+      // 2. 创建反向好友关系（确保双向好友关系）
+      const { error: createError } = await supabase
+        .from('friend_relationships')
+        .upsert(
+          { 
+            user_id: currentUserId, 
+            friend_id: senderId, 
+            status: 'accepted', 
+            updated_at: new Date().toISOString() 
+          },
+          { onConflict: 'user_id, friend_id' }
+        );
+
+      if (createError) {
+        console.error('创建反向好友关系失败:', createError);
+        // 继续执行，不影响主流程
+      }
+
+      // 3. 获取当前用户名称
+      const { data: me } = await supabase.from('profiles').select('email').eq('id', currentUserId).single();
+      const myName = me?.email?.split('@')[0] || '有人';
+
+      // 4. 发送通知给申请人
+      await supabase.from('notifications').insert({
+        user_id: senderId,
+        type: 'friend_request_accepted',
+        message: `${myName} 已接受了你的好友申请`,
+        data: { senderId: currentUserId },
+        read: false
+      });
+
+      console.log('好友申请接受成功');
+      return true;
+    } catch (error) {
+      console.error('接受失败:', error);
+      return false;
+    }
+  }
+
+  // 4. 获取待处理的好友申请
   static async getFriendRequests(userId: string): Promise<FriendRequest[]> {
     try {
+      console.log('获取待处理好友申请:', userId);
+
+      // 获取待处理的好友申请
       const { data, error } = await supabase
         .from('friend_relationships')
-        .select(`
-          id, created_at,
-          sender:profiles!user_id(id, email)
-        `)
+        .select('id, created_at, user_id')
         .eq('friend_id', userId)
         .eq('status', 'pending');
 
-      if (error) throw error;
+      if (error) {
+        console.error('获取好友申请错误:', error);
+        throw error;
+      }
 
-      return (data as any[] || []).map(req => {
-        const username = req.sender?.email?.split('@')[0] || '未知用户';
-        return {
-          id: req.id,
-          userId: req.sender?.id,
-          username: username,
-          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${req.sender?.id}`,
-          timestamp: new Date(req.created_at).getTime()
-        };
+      if (!data || data.length === 0) {
+        return [];
+      }
+
+      // 提取所有发送者ID
+      const senderIds = data.map(req => req.user_id);
+
+      // 批量获取发送者信息
+      const { data: senders, error: sendersError } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .in('id', senderIds);
+
+      if (sendersError) {
+        console.error('获取发送者信息错误:', sendersError);
+        return [];
+      }
+
+      // 创建发送者信息映射
+      const senderMap = new Map<string, any>();
+      senders?.forEach(sender => {
+        senderMap.set(sender.id, sender);
+      });
+
+      // 构建好友申请列表
+      return data.map((req: any) => {
+        const sender = senderMap.get(req.user_id);
+        if (sender) {
+          return {
+            id: req.id,
+            userId: sender.id,
+            username: sender.email.split('@')[0],
+            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${sender.id}`,
+            timestamp: new Date(req.created_at).getTime()
+          };
+        } else {
+          return {
+            id: req.id,
+            userId: req.user_id,
+            username: '未知用户',
+            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${req.user_id}`,
+            timestamp: new Date(req.created_at).getTime()
+          };
+        }
       });
     } catch (error) {
+      console.error('获取好友申请异常:', error);
       return [];
     }
   }
 
-  // 私有辅助方法：实时通知
-  private static async sendRealTimeNotification(userId: string, n: any) {
-    await supabase.from('notifications').insert({
-      user_id: userId, type: n.type, message: n.message, data: n, read: false
-    });
+  // 5. 拒绝好友申请
+  static async rejectFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
+    try {
+      console.log('拒绝好友申请:', senderId, '->', currentUserId);
+
+      const { error } = await supabase
+        .from('friend_relationships')
+        .delete()
+        .eq('id', requestId);
+
+      if (error) {
+        console.error('拒绝好友申请失败:', error);
+        return false;
+      }
+
+      // 发送通知给申请人
+      const { data: me } = await supabase.from('profiles').select('email').eq('id', currentUserId).single();
+      const myName = me?.email?.split('@')[0] || '有人';
+
+      await supabase.from('notifications').insert({
+        user_id: senderId,
+        type: 'friend_request_rejected',
+        message: `${myName} 已拒绝了你的好友申请`,
+        data: { senderId: currentUserId },
+        read: false
+      });
+
+      console.log('好友申请拒绝成功');
+      return true;
+    } catch (error) {
+      console.error('拒绝好友申请异常:', error);
+      return false;
+    }
   }
 
-  // 修复了此处的 split 潜在崩溃风险
-  private static async sendFriendRequestAcceptedNotification(meId: string, himId: string) {
-    const { data: meProfile } = await supabase.from('profiles').select('email').eq('id', meId).single();
-    const myName = meProfile?.email?.split('@')[0] || '某人';
+  // 6. 删除好友
+  static async removeFriend(currentUserId: string, friendId: string): Promise<boolean> {
+    try {
+      console.log('删除好友:', currentUserId, '->', friendId);
 
-    await this.sendRealTimeNotification(himId, {
-      type: 'friend_request_accepted',
-      message: `${myName} 已接受了你的申请`,
-      senderId: meId
-    });
-  }
+      // 删除双向好友关系
+      const { error } = await supabase
+        .from('friend_relationships')
+        .delete()
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`);
 
-  static async rejectFriendRequest(me: string, him: string, requestId: string) {
-    const { error } = await supabase.from('friend_relationships').delete().eq('id', requestId);
-    return !error;
-  }
+      if (error) {
+        console.error('删除好友失败:', error);
+        return false;
+      }
 
-  static async removeFriend(userId: string, friendId: string): Promise<boolean> {
-    const { error } = await supabase.from('friend_relationships').delete()
-      .or(`and(user_id.eq.${userId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${userId})`);
-    return !error;
+      console.log('好友删除成功');
+      return true;
+    } catch (error) {
+      console.error('删除好友异常:', error);
+      return false;
+    }
   }
 }
 
