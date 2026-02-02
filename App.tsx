@@ -30,7 +30,7 @@ import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
 
 // --- Constants ---
-const DATA_VERSION = "2.0.0"; 
+const DATA_VERSION = "2.0.1"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
@@ -246,9 +246,6 @@ const App: React.FC = () => {
     };
     loadLocal();
 
-    // 初始化邮件系统
-    initEmailSystem();
-
     const savedProvider = localStorage.getItem('ai_provider') as AIProvider;
     const savedKey = localStorage.getItem('ai_key');
     const savedBaseUrl = localStorage.getItem('ai_base_url');
@@ -296,6 +293,14 @@ const App: React.FC = () => {
         return () => subscription.unsubscribe();
     }
   }, []);
+
+  // 当currentUserId变化时，重新初始化邮件系统
+  useEffect(() => {
+    // 确保只有在currentUserId或isDataLoaded变化时才运行
+    if (isDataLoaded) {
+      initEmailSystem();
+    }
+  }, [currentUserId, isDataLoaded]);
 
   useEffect(() => { localStorage.setItem('inf_stats', JSON.stringify(stats)); }, [stats]);
   useEffect(() => { localStorage.setItem('inf_profile', JSON.stringify(userProfile)); }, [userProfile]);
@@ -1002,7 +1007,7 @@ const App: React.FC = () => {
     // 检查用户是否已经收到过初始邮件
     const hasReceivedInitialEmails = localStorage.getItem(hasInitialEmailsKey);
     
-    // 如果用户已经收到过初始邮件，从localStorage加载邮件
+    // 从localStorage加载邮件
     const savedEmails = localStorage.getItem(emailsKey);
     if (savedEmails) {
       try {
