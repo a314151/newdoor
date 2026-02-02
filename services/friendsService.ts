@@ -30,25 +30,26 @@ class FriendsService {
         return false;
       }
       
-      // 生成申请ID
-      const requestId = Date.now().toString();
-      
-      // 保存好友申请到数据库
-      const { error } = await supabase
+      // 保存好友申请到数据库（使用Supabase自动生成ID）
+      const { data, error } = await supabase
         .from('friend_relationships')
         .insert({
-          id: requestId,
           user_id: currentUserId,
           friend_id: friendId,
           status: 'pending',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        })
+        .select('id')
+        .single();
       
-      if (error) {
+      if (error || !data) {
         console.error('保存好友申请失败:', error);
         return false;
       }
+      
+      // 获取Supabase自动生成的ID
+      const requestId = data.id;
       
       // 使用Supabase实时功能发送通知
       await this.sendRealTimeNotification(friendId, {
