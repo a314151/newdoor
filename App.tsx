@@ -1101,21 +1101,8 @@ const App: React.FC = () => {
         return;
       }
 
-      // 同时在本地创建一个邮件，以便发送者也能看到
-      const newEmail: Email = {
-        id: Date.now().toString(),
-        subject: data.subject,
-        content: data.content,
-        attachments: data.attachments,
-        isRead: false,
-        isClaimed: false,
-        timestamp: Date.now(),
-        sender: '系统'
-      };
-
-      // 添加到邮件列表
-      setEmails(prev => [newEmail, ...prev]);
-      setUnreadEmailCount(prev => prev + 1);
+      // 不需要在本地直接创建邮件，因为 notificationService 会通过实时监听自动创建
+      // 这样可以避免本地用户收到重复的通知
     } catch (error) {
       console.error('发送通知失败:', error);
       addToast('发送通知失败', 'error');
