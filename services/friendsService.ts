@@ -30,26 +30,56 @@ class FriendsService {
         return false;
       }
       
-      // 保存好友申请到数据库（使用Supabase自动生成ID）
-      const { data, error } = await supabase
+      // 检查是否已经存在好友关系
+      const { data: existingRelationship, error: checkError } = await supabase
         .from('friend_relationships')
-        .insert({
-          user_id: currentUserId,
-          friend_id: friendId,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select('id')
+        .select('id, status')
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`)
         .single();
       
-      if (error || !data) {
-        console.error('保存好友申请失败:', error);
-        return false;
+      let requestId: string;
+      
+      if (!checkError && existingRelationship) {
+        // 如果已经存在好友关系，更新其状态为pending
+        const { data: updatedData, error: updateError } = await supabase
+          .from('friend_relationships')
+          .update({
+            status: 'pending',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingRelationship.id)
+          .select('id')
+          .single();
+        
+        if (updateError || !updatedData) {
+          console.error('更新好友申请状态失败:', updateError);
+          return false;
+        }
+        
+        requestId = updatedData.id;
+      } else {
+        // 如果不存在好友关系，创建一个新的
+        const { data: newData, error: insertError } = await supabase
+          .from('friend_relationships')
+          .insert({
+            user_id: currentUserId,
+            friend_id: friendId,
+            status: 'pending',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .select('id')
+          .single();
+        
+        if (insertError || !newData) {
+          console.error('保存好友申请失败:', insertError);
+          return false;
+        }
+        
+        requestId = newData.id;
       }
       
-      // 获取Supabase自动生成的ID
-      const requestId = data.id;
+
       
       // 使用Supabase实时功能发送通知
       await this.sendRealTimeNotification(friendId, {
