@@ -69,11 +69,23 @@ class NotificationService {
             }
 
             // 创建邮件通知，添加到邮件系统中
+            // 对于系统通知，使用 data 字段中的详细内容和附件
+            let emailSubject = notification.type === 'friend_request' ? '好友申请' : '系统通知';
+            let emailContent = notification.message || '你收到了一条新通知';
+            let emailAttachments = [];
+            
+            // 如果是系统通知且包含详细数据
+            if (notification.type === 'system_notification' && notification.data) {
+              emailSubject = notification.data.subject || emailSubject;
+              emailContent = notification.data.content || emailContent;
+              emailAttachments = notification.data.attachments || [];
+            }
+            
             const email: Email = {
               id: notification.id,
-              subject: notification.type === 'friend_request' ? '好友申请' : '系统通知',
-              content: notification.message || '你收到了一条新通知',
-              attachments: [],
+              subject: emailSubject,
+              content: emailContent,
+              attachments: emailAttachments,
               isRead: false,
               isClaimed: false,
               timestamp: new Date(notification.created_at || Date.now()).getTime(),

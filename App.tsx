@@ -1028,7 +1028,7 @@ const App: React.FC = () => {
     addToast('邮件奖励已领取', 'success');
   };
 
-  const sendNotification = (data: {
+  const sendNotification = async (data: {
     subject: string;
     content: string;
     attachments: Array<{
@@ -1042,26 +1042,84 @@ const App: React.FC = () => {
     sendToAll: boolean;
     specificUserId?: string;
   }) => {
-    // 这里可以添加发送通知到服务器的逻辑
-    // 现在我们先实现本地模拟
+    try {
+      if (!isSupabaseConfigured()) {
+        addToast('请先连接云服务', 'error');
+        return;
+      }
 
-    // 创建新邮件
-    const newEmail: Email = {
-      id: Date.now().toString(),
-      subject: data.subject,
-      content: data.content,
-      attachments: data.attachments,
-      isRead: false,
-      isClaimed: false,
-      timestamp: Date.now(),
-      sender: '系统'
-    };
+      // 创建通知数据
+      const notificationData = {
+        subject: data.subject,
+        content: data.content,
+        attachments: data.attachments,
+        timestamp: Date.now()
+      };
 
-    // 添加到邮件列表
-    setEmails(prev => [newEmail, ...prev]);
-    setUnreadEmailCount(prev => prev + 1);
+      if (data.sendToAll) {
+        // 发送给所有用户
+        // 1. 获取所有用户的ID
+        const { data: users, error: usersError } = await supabase
+          .from('profiles')
+          .select('id');
 
-    addToast('通知已发送', 'success');
+        if (usersError) {
+          console.error('获取用户列表失败:', usersError);
+          addToast('获取用户列表失败', 'error');
+          return;
+        }
+
+        if (users && users.length > 0) {
+          // 2. 向每个用户发送通知
+          for (const user of users) {
+            await supabase.from('notifications').insert({
+              user_id: user.id,
+              type: 'system_notification',
+              message: data.subject,
+              data: notificationData,
+              read: false
+            });
+          }
+
+          addToast(`通知已发送给 ${users.length} 个用户`, 'success');
+        } else {
+          addToast('没有找到任何用户', 'info');
+        }
+      } else if (data.specificUserId) {
+        // 发送给指定用户
+        await supabase.from('notifications').insert({
+          user_id: data.specificUserId,
+          type: 'system_notification',
+          message: data.subject,
+          data: notificationData,
+          read: false
+        });
+
+        addToast('通知已发送给指定用户', 'success');
+      } else {
+        addToast('请选择发送对象', 'error');
+        return;
+      }
+
+      // 同时在本地创建一个邮件，以便发送者也能看到
+      const newEmail: Email = {
+        id: Date.now().toString(),
+        subject: data.subject,
+        content: data.content,
+        attachments: data.attachments,
+        isRead: false,
+        isClaimed: false,
+        timestamp: Date.now(),
+        sender: '系统'
+      };
+
+      // 添加到邮件列表
+      setEmails(prev => [newEmail, ...prev]);
+      setUnreadEmailCount(prev => prev + 1);
+    } catch (error) {
+      console.error('发送通知失败:', error);
+      addToast('发送通知失败', 'error');
+    }
   };
 
   const deleteEmail = (emailId: string) => {

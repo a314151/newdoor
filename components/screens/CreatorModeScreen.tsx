@@ -21,7 +21,7 @@ interface CreatorModeScreenProps {
     }>;
     sendToAll: boolean;
     specificUserId?: string;
-  }) => void;
+  }) => Promise<void>;
 }
 
 const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification }) => {
@@ -75,7 +75,7 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
     setAttachments(attachments.filter((_, i) => i !== index));
   };
   
-  const handleSendNotification = () => {
+  const handleSendNotification = async () => {
     if (!onSendNotification) return;
     
     if (!notificationSubject || !notificationContent) {
@@ -83,7 +83,7 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
       return;
     }
     
-    onSendNotification({
+    await onSendNotification({
       subject: notificationSubject,
       content: notificationContent,
       attachments,
