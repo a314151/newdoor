@@ -32,7 +32,7 @@ import AuthModal from './components/modals/AuthModal';
 import NotificationModal from './components/ui/NotificationModal';
 
 // --- Constants ---
-const DATA_VERSION = "2.0.4"; 
+const DATA_VERSION = "3.0.0"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
@@ -770,6 +770,42 @@ const App: React.FC = () => {
       return false;
     }
   };
+  
+  // 接受好友申请
+  const handleAcceptFriendRequest = async (senderId: string, requestId: string) => {
+    try {
+      // 使用FriendsService接受好友申请
+      const success = await FriendsService.acceptFriendRequest(currentUserId!, senderId, requestId);
+      
+      if (success) {
+        addToast('好友申请已接受，对方将收到通知', 'success');
+        // 刷新好友列表
+        fetchFriends();
+      } else {
+        addToast('接受好友申请失败', 'error');
+      }
+    } catch (error) {
+      console.error('接受好友申请失败:', error);
+      addToast('接受好友申请失败', 'error');
+    }
+  };
+  
+  // 拒绝好友申请
+  const handleRejectFriendRequest = async (senderId: string, requestId: string) => {
+    try {
+      // 使用FriendsService拒绝好友申请
+      const success = await FriendsService.rejectFriendRequest(currentUserId!, senderId, requestId);
+      
+      if (success) {
+        addToast('好友申请已拒绝，对方将收到通知', 'success');
+      } else {
+        addToast('拒绝好友申请失败', 'error');
+      }
+    } catch (error) {
+      console.error('拒绝好友申请失败:', error);
+      addToast('拒绝好友申请失败', 'error');
+    }
+  };
 
   const acceptFriendRequest = async (requestId: string) => {
     try {
@@ -1040,138 +1076,6 @@ const App: React.FC = () => {
     addToast('邮件已删除', 'info');
   };
   
-  const handleAcceptFriendRequest = async (senderId: string, emailId: string) => {
-    try {
-      // 检查是否已经是好友
-      const { data: existingFriends, error: checkError } = await supabase
-        .from('friend_relationships')
-        .select('id, status')
-        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${senderId}),and(user_id.eq.${senderId},friend_id.eq.${currentUserId})`);
-      
-      if (existingFriends && existingFriends.length > 0) {
-        const isFriend = existingFriends.some(rel => rel.status === 'accepted');
-        if (isFriend) {
-          addToast('你们已经是好友了', 'info');
-          deleteEmail(emailId);
-          return;
-        }
-      }
-      
-      // 创建好友关系
-      const { error } = await supabase
-        .from('friend_relationships')
-        .insert({
-          user_id: currentUserId,
-          friend_id: senderId,
-          status: 'accepted',
-          updated_at: new Date().toISOString()
-        });
-      
-      if (error) {
-        addToast('接受好友申请失败', 'error');
-        return;
-      }
-      
-      // 向发送方发送邮件通知
-      const { data: currentUserData } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('id', currentUserId)
-        .single();
-      
-      if (currentUserData) {
-        const { data: senderUserData } = await supabase
-          .from('profiles')
-          .select('id, email')
-          .eq('id', senderId)
-          .single();
-        
-        if (senderUserData) {
-          // 向发送方发送邮件通知
-          const newEmail: Email = {
-            id: Date.now().toString(),
-            subject: '好友申请已接受',
-            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已接受了你的好友申请。\n\n现在你们已经成为好友，可以开始聊天了！`,
-            attachments: [
-              {
-                type: EmailContentType.ITEM,
-                itemType: ItemType.XP_SMALL
-              }
-            ],
-            isRead: false,
-            isClaimed: false,
-            timestamp: Date.now(),
-            sender: '系统'
-          };
-          
-          // 模拟本地发送：将邮件保存到发送方的 localStorage 中
-          const senderEmailsKey = `inf_emails_${senderId}`;
-          const senderSavedEmails = localStorage.getItem(senderEmailsKey);
-          let senderEmails: Email[] = [];
-          
-          if (senderSavedEmails) {
-            try {
-              senderEmails = JSON.parse(senderSavedEmails);
-            } catch (e) {
-              console.error('Failed to load sender saved emails:', e);
-            }
-          }
-          
-          // 添加新邮件到发送方的邮件列表
-          senderEmails.unshift(newEmail);
-          localStorage.setItem(senderEmailsKey, JSON.stringify(senderEmails));
-          
-          console.log('向用户', senderUserData.email, '发送好友申请接受邮件');
-          addToast('好友申请已接受，对方将收到邮件通知', 'success');
-        }
-      }
-      
-      // 删除邮件
-      deleteEmail(emailId);
-      // 刷新好友列表
-      fetchFriends();
-    } catch (error) {
-      console.error('接受好友申请失败:', error);
-      addToast('接受好友申请失败', 'error');
-    }
-  };
-  
-  // 接受好友申请
-  const handleAcceptFriendRequest = async (senderId: string, requestId: string) => {
-    try {
-      // 使用FriendsService接受好友申请
-      const success = await FriendsService.acceptFriendRequest(currentUserId!, senderId, requestId);
-      
-      if (success) {
-        addToast('好友申请已接受，对方将收到通知', 'success');
-        // 刷新好友列表
-        fetchFriends();
-      } else {
-        addToast('接受好友申请失败', 'error');
-      }
-    } catch (error) {
-      console.error('接受好友申请失败:', error);
-      addToast('接受好友申请失败', 'error');
-    }
-  };
-  
-  // 拒绝好友申请
-  const handleRejectFriendRequest = async (senderId: string, requestId: string) => {
-    try {
-      // 使用FriendsService拒绝好友申请
-      const success = await FriendsService.rejectFriendRequest(currentUserId!, senderId, requestId);
-      
-      if (success) {
-        addToast('好友申请已拒绝，对方将收到通知', 'success');
-      } else {
-        addToast('拒绝好友申请失败', 'error');
-      }
-    } catch (error) {
-      console.error('拒绝好友申请失败:', error);
-      addToast('拒绝好友申请失败', 'error');
-    }
-  };
-
   const initEmailSystem = () => {
     // 获取当前用户ID
     const userId = currentUserId || 'guest';
@@ -1196,61 +1100,12 @@ const App: React.FC = () => {
       }
     }
     
-    // 只有第一次登录的用户才会收到初始邮件
-    if (!hasReceivedInitialEmails) {
-      // 初始化邮件系统，添加一些示例邮件
-      const sampleEmails: Email[] = [
-        {
-          id: '1',
-          subject: '欢迎来到无限之门',
-          content: '亲爱的冒险者，欢迎加入无限之门的世界！这里充满了未知的挑战和机遇，希望你能在这里度过一段美好的冒险时光。',
-          attachments: [
-            {
-              type: EmailContentType.STONES,
-              stones: 5
-            },
-            {
-              type: EmailContentType.ITEM,
-              itemType: ItemType.XP_LARGE
-            }
-          ],
-          isRead: false,
-          isClaimed: false,
-          timestamp: Date.now() - 86400000,
-          sender: '系统',
-          isInitialEmail: true
-        },
-        {
-          id: '2',
-          subject: '等级提升奖励',
-          content: '恭喜你成功提升到10级！这是你的等级奖励，请查收。',
-          attachments: [
-            {
-              type: EmailContentType.XP,
-              xp: 500
-            }
-          ],
-          isRead: true,
-          isClaimed: false,
-          timestamp: Date.now() - 43200000,
-          sender: '系统',
-          isInitialEmail: true
-        }
-      ];
-
-      setEmails(sampleEmails);
-      setUnreadEmailCount(sampleEmails.filter(email => !email.isRead).length);
-      
-      // 标记用户已经收到过初始邮件
-      localStorage.setItem(hasInitialEmailsKey, 'true');
-      // 保存邮件到localStorage
-      localStorage.setItem(emailsKey, JSON.stringify(sampleEmails));
-    } else {
-      // 如果用户已经收到过初始邮件，但没有保存的邮件，设置为空数组
-      setEmails([]);
-      setUnreadEmailCount(0);
-      localStorage.setItem(emailsKey, JSON.stringify([]));
-    }
+    // 直接设置空邮件列表，不发送任何初始邮件
+    setEmails([]);
+    setUnreadEmailCount(0);
+    localStorage.setItem(emailsKey, JSON.stringify([]));
+    // 标记用户已经处理过初始邮件，防止后续重复处理
+    localStorage.setItem(hasInitialEmailsKey, 'true');
   };
 
   const fetchFromCloud = async (userId: string) => {
