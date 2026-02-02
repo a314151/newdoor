@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry, Email, EmailContentType } from './types';
+import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry, Friend, FriendRequest, ChatMessage, Email, EmailContentType } from './types';
 import { generateTheme, generateImage, generateStoryOptions, getPlaceholderImage, generateLevelNarrative, generateFullStory, generateHero } from './services/aiService';
-import { calculateXpGain, generateEnemyStats, calculateMaxStats, getTitleByLevel } from './services/gameLogic';
+import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './services/gameLogic';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 // Modular Component Imports
@@ -19,16 +19,18 @@ import DiscussionScreen from './components/screens/DiscussionScreen';
 import LuckScreen from './components/screens/LuckScreen';
 import MenuScreen from './components/screens/MenuScreen';
 import LeaderboardScreen from './components/screens/LeaderboardScreen'; // Imported LeaderboardScreen
+import FriendsScreen from './components/screens/FriendsScreen';
+import ChatScreen from './components/screens/ChatScreen';
+import EmailScreen from './components/screens/EmailScreen';
 import InventoryModal from './components/modals/InventoryModal';
 import SettingsModal from './components/modals/SettingsModal';
 import PasswordModal from './components/modals/PasswordModal';
 import ProfileModal from './components/modals/ProfileModal';
 import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
-import EmailScreen from './components/screens/EmailScreen';
 
 // --- Constants ---
-const DATA_VERSION = "1.7.7"; 
+const DATA_VERSION = "2.0.0"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
@@ -82,6 +84,34 @@ const LOADING_MESSAGES = [
   "正在唤醒沉睡的Boss...",
   "正在编写掉落物品的说明书..."
 ];
+
+// 特殊UID - 造物者
+const CREATOR_UID = "50af4084-52b3-4e50-9dc1-4a11c7311c78";
+
+// 根据等级获取称号
+const getTitleByLevel = (level: number, userId?: string): string => {
+  // 检查是否是造物者
+  if (userId === CREATOR_UID) {
+    return "造物者";
+  }
+  
+  // 根据等级分配称号
+  if (level >= 61) {
+    return "新人";
+  } else if (level >= 51) {
+    return "众山小";
+  } else if (level >= 41) {
+    return "凌绝顶";
+  } else if (level >= 31) {
+    return "威震一方";
+  } else if (level >= 21) {
+    return "小有成就";
+  } else if (level >= 11) {
+    return "初出茅庐";
+  } else {
+    return "见习";
+  }
+};
 
 const getSafeEnv = (key: string): string | undefined => {
   try {
@@ -140,6 +170,13 @@ const App: React.FC = () => {
   // Leaderboard State
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
+  const [leaderboardSortBy, setLeaderboardSortBy] = useState<'registerTime' | 'level'>('registerTime');
+
+  // Friends System State
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
+  const [currentChatFriend, setCurrentChatFriend] = useState<Friend | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   // Email System State
   const [emails, setEmails] = useState<Email[]>([]);
@@ -152,7 +189,6 @@ const App: React.FC = () => {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showEmailScreen, setShowEmailScreen] = useState(false);
   
   // Auth & Sync State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -181,29 +217,37 @@ const App: React.FC = () => {
 
     const loadLocal = () => {
         const savedStats = localStorage.getItem('inf_stats');
-        if (savedStats) setStats(JSON.parse(savedStats));
         const savedProfile = localStorage.getItem('inf_profile');
-        if (savedProfile) setUserProfile(JSON.parse(savedProfile));
         const savedInv = localStorage.getItem('inf_inv');
-        if (savedInv) setInventory(JSON.parse(savedInv));
         const savedHist = localStorage.getItem('inf_hist');
-        if (savedHist) setHistory(JSON.parse(savedHist));
         const savedFail = localStorage.getItem('inf_fail');
-        if (savedFail) setFailedLevels(JSON.parse(savedFail));
         const savedStories = localStorage.getItem('inf_stories');
-        if (savedStories) setStories(JSON.parse(savedStories));
         const savedImageSetting = localStorage.getItem('inf_use_ai_images');
-        if (savedImageSetting !== null) setUseAiImages(JSON.parse(savedImageSetting));
         const savedHeroes = localStorage.getItem('inf_heroes');
-        if (savedHeroes) setHeroes(JSON.parse(savedHeroes));
         const savedActiveHero = localStorage.getItem('inf_active_hero');
+        
+        if (savedStats) setStats(JSON.parse(savedStats));
+        if (savedProfile) {
+            const profile = JSON.parse(savedProfile);
+            // 确保称号正确
+            const currentLevel = savedStats ? JSON.parse(savedStats).level : 1;
+            const correctTitle = getTitleByLevel(currentLevel, currentUserId);
+            setUserProfile({ ...profile, title: correctTitle });
+        }
+        if (savedInv) setInventory(JSON.parse(savedInv));
+        if (savedHist) setHistory(JSON.parse(savedHist));
+        if (savedFail) setFailedLevels(JSON.parse(savedFail));
+        if (savedStories) setStories(JSON.parse(savedStories));
+        if (savedImageSetting !== null) setUseAiImages(JSON.parse(savedImageSetting));
+        if (savedHeroes) setHeroes(JSON.parse(savedHeroes));
         if (savedActiveHero) setActiveHeroId(savedActiveHero);
         
         setIsDataLoaded(true); 
-        // 初始化邮件系统
-        initEmailSystem();
     };
     loadLocal();
+
+    // 初始化邮件系统
+    initEmailSystem();
 
     const savedProvider = localStorage.getItem('ai_provider') as AIProvider;
     const savedKey = localStorage.getItem('ai_key');
@@ -233,7 +277,6 @@ const App: React.FC = () => {
                 setSyncStatus('saved');
                 fetchFromCloud(session.user.id);
                 fetchAgentRank(session.user.created_at);
-                initEmailSystem();
             }
         });
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -263,7 +306,13 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('inf_use_ai_images', JSON.stringify(useAiImages)); }, [useAiImages]);
   useEffect(() => { localStorage.setItem('inf_heroes', JSON.stringify(heroes)); }, [heroes]);
   useEffect(() => { localStorage.setItem('inf_active_hero', activeHeroId); }, [activeHeroId]);
-  useEffect(() => { localStorage.setItem('inf_emails', JSON.stringify(emails)); }, [emails]);
+  
+  // 保存邮件状态到localStorage
+  useEffect(() => {
+    const userId = currentUserId || 'guest';
+    const emailsKey = `inf_emails_${userId}`;
+    localStorage.setItem(emailsKey, JSON.stringify(emails));
+  }, [emails, currentUserId]);
 
   useEffect(() => {
     if (!userEmail || !isDataLoaded) return;
@@ -313,13 +362,662 @@ const App: React.FC = () => {
       }
   };
 
+  const fetchLeaderboard = async () => {
+    if (!isSupabaseConfigured()) {
+        addToast("请先连接云服务", "error");
+        return;
+    }
+    setIsLeaderboardLoading(true);
+    setGameState(GameState.LEADERBOARD);
+    
+    try {
+        console.log("开始获取排行榜数据...");
+        
+        // 1. 检查当前用户状态
+        console.log("检查当前用户状态...");
+        let user = null;
+        try {
+            const { data } = await supabase.auth.getUser();
+            user = data.user;
+            console.log("当前用户:", user);
+        } catch (e) {
+            console.error("获取用户状态失败:", e);
+            addToast("请先登录", "error");
+            setLeaderboardData([]);
+            setIsLeaderboardLoading(false);
+            return;
+        }
+        
+        if (!user) {
+            console.error("用户未登录");
+            addToast("请先登录", "error");
+            setLeaderboardData([]);
+            setIsLeaderboardLoading(false);
+            return;
+        }
+        
+        // 2. 测试Supabase连接
+        console.log("测试Supabase连接...");
+        const { data: testData, error: testError } = await supabase
+            .from('game_saves')
+            .select('user_id')
+            .limit(1);
+        
+        if (testError) {
+            console.error("Supabase连接测试失败:", testError);
+            addToast(`连接失败: ${testError.message}`, "error");
+            setLeaderboardData([]);
+            return;
+        }
+        console.log("Supabase连接测试成功");
+        console.log("测试数据:", testData);
+        
+        // 3. 尝试获取所有用户的信息
+        console.log("获取所有用户信息...");
+        let allUsers: any[] = [];
+        try {
+            // 从profiles表获取用户信息，包含created_at
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, email, created_at');
+            
+            if (!profilesError && profilesData) {
+                console.log("从profiles表获取到用户数据:", profilesData);
+                allUsers = profilesData;
+            } else {
+                console.log("无法从profiles表获取数据，使用其他方法:", profilesError);
+                // 从users表获取用户信息
+                const { data: usersData, error: usersError } = await supabase
+                    .from('users')
+                    .select('id, email, created_at');
+                
+                if (!usersError && usersData) {
+                    console.log("从users表获取到用户数据:", usersData);
+                    allUsers = usersData;
+                } else {
+                    console.log("无法从users表获取数据:", usersError);
+                }
+            }
+        } catch (e) {
+            console.log("获取用户信息失败:", e);
+        }
+
+        
+        console.log("获取到的用户数量:", allUsers.length);
+        console.log("用户数据:", allUsers);
+        
+        // 检查用户数据是否包含created_at字段
+        if (allUsers.length > 0) {
+            console.log("第一个用户的数据结构:", JSON.stringify(allUsers[0], null, 2));
+            console.log("第一个用户的created_at:", allUsers[0].created_at);
+        } else {
+            console.log("警告：没有获取到任何用户数据！");
+        }
+        
+        // 4. 获取所有游戏存档数据
+        console.log("获取游戏存档数据...");
+        let saves: any[] = [];
+        try {
+            // 尝试使用不同的查询方式
+            const { data, error } = await supabase
+                .from('game_saves')
+                .select('*');
+            
+            if (error) {
+                console.error("获取存档数据失败:", error);
+                // 尝试另一种查询方式
+                try {
+                    const { data: altData, error: altError } = await supabase
+                        .from('game_saves')
+                        .select();
+                    
+                    if (!altError && altData) {
+                        console.log("使用替代查询方式获取到存档数据");
+                        saves = altData;
+                    } else {
+                        console.error("替代查询方式也失败:", altError);
+                    }
+                } catch (e) {
+                    console.error("替代查询方式出错:", e);
+                }
+            } else {
+                saves = data || [];
+            }
+        } catch (e) {
+            console.error("获取存档数据时出错:", e);
+        }
+        
+        console.log("获取到的存档数量:", saves.length);
+        console.log("存档数据:", saves);
+        
+        // 从游戏存档中提取用户ID，确保我们能获取到所有用户的信息
+        const userIdsFromSaves = saves.map(save => save.user_id).filter((id, index, self) => self.indexOf(id) === index);
+        console.log("从存档中提取的用户ID:", userIdsFromSaves);
+        
+        // 5. 创建存档数据映射
+        const saveMap: Record<string, any> = {};
+        saves.forEach(save => {
+            saveMap[save.user_id] = save;
+        });
+        
+        // 6. 为每个用户创建排行榜条目
+        console.log("创建排行榜条目...");
+        const entries: LeaderboardEntry[] = [];
+        
+        // 创建用户数据映射，方便快速查找用户的注册时间
+        const userMap: Record<string, any> = {};
+        allUsers.forEach(userData => {
+            const userId = userData.id || userData.user_id;
+            userMap[userId] = userData;
+            console.log(`用户 ${userId} 的注册时间（来自profiles表）:`, userData.created_at);
+        });
+        
+        // 首先处理有存档的用户
+        saves.forEach(save => {
+            const saveData = save.save_data || {};
+            
+            console.log(`处理用户 ${save.user_id}:`);
+            
+            // 只能使用从profiles表获取的created_at作为注册时间，失败就报错
+            const userData = userMap[save.user_id];
+            if (!userData) {
+                throw new Error(`用户 ${save.user_id} 在profiles表中不存在，无法确定注册时间`);
+            }
+            
+            if (!userData.created_at) {
+                throw new Error(`用户 ${save.user_id} 在profiles表中没有created_at字段，无法确定注册时间`);
+            }
+            
+            const createdTime = new Date(userData.created_at);
+            if (isNaN(createdTime.getTime())) {
+                throw new Error(`用户 ${save.user_id} 的created_at字段值无效: ${userData.created_at}`);
+            }
+            
+            const createdAt = createdTime.getTime();
+            console.log(`用户 ${save.user_id} 的注册时间（来自profiles表）:`, createdTime.toISOString());
+            
+            // 改进在线状态检测：基于最近活动时间
+            // 如果用户有存档，使用updated_at判断是否在线
+            // 如果用户没有存档，使用created_at判断是否在线（新用户）
+            let isOnline = false;
+            
+            if (save.updated_at) {
+                const lastActiveTime = new Date(save.updated_at).getTime();
+                // 最近5分钟内有活动视为在线
+                isOnline = lastActiveTime > Date.now() - 5 * 60 * 1000;
+                console.log(`用户 ${save.user_id} 最后活动时间:`, new Date(lastActiveTime).toISOString(), '在线:', isOnline);
+            } else if (userData.created_at) {
+                const createdTime = new Date(userData.created_at).getTime();
+                // 如果是新用户（注册时间在5分钟内），视为在线
+                isOnline = createdTime > Date.now() - 5 * 60 * 1000;
+                console.log(`用户 ${save.user_id} 是新用户，注册时间:`, new Date(createdTime).toISOString(), '在线:', isOnline);
+            }
+            
+            const currentLevel = saveData.stats?.level || 1;
+            const correctTitle = getTitleByLevel(currentLevel, save.user_id);
+            
+            const entry = {
+                userId: save.user_id,
+                username: saveData.profile?.username || `Agent ${save.user_id.substring(0, 8)}`,
+                avatarUrl: saveData.profile?.avatarUrl || 'https://placehold.co/100x100?text=?',
+                title: correctTitle,
+                level: currentLevel,
+                updatedAt: new Date(save.updated_at).getTime(),
+                createdAt,
+                isOnline
+            };
+            
+            console.log(`创建的排行榜条目:`, entry);
+            entries.push(entry);
+        });
+        
+        // 然后处理没有存档的用户
+        allUsers.forEach(userData => {
+            const userId = userData.id || userData.user_id;
+            if (!saveMap[userId]) {
+                // 只能使用created_at作为注册时间，失败就报错
+                if (!userData.created_at) {
+                    throw new Error(`用户 ${userId} 没有created_at字段，无法确定注册时间`);
+                }
+                
+                const createdTime = new Date(userData.created_at);
+                if (isNaN(createdTime.getTime())) {
+                    throw new Error(`用户 ${userId} 的created_at字段值无效: ${userData.created_at}`);
+                }
+                
+                const createdAt = createdTime.getTime();
+                console.log(`用户 ${userId} 的注册时间（没有存档）:`, createdTime.toISOString());
+                
+                const currentLevel = 1;
+                const correctTitle = getTitleByLevel(currentLevel, userId);
+                
+                entries.push({
+                    userId,
+                    username: userData.email || `Agent ${userId.substring(0, 8)}`,
+                    avatarUrl: 'https://placehold.co/100x100?text=?',
+                    title: correctTitle,
+                    level: currentLevel,
+                    updatedAt: createdAt,
+                    createdAt,
+                    isOnline: false
+                });
+            }
+        });
+        
+        // 首先将造物者排在第一位
+        const creatorEntry = entries.find(entry => entry.userId === CREATOR_UID);
+        const otherEntries = entries.filter(entry => entry.userId !== CREATOR_UID);
+        
+        // 根据选择的排序方式对其他用户排序
+        if (leaderboardSortBy === 'registerTime') {
+            // 按注册时间排序，越早注册排名越高
+            otherEntries.sort((a, b) => a.createdAt - b.createdAt);
+        } else {
+            // 按等级排序，等级高的排在前面
+            otherEntries.sort((a, b) => b.level - a.level);
+        }
+        
+        // 组合排序结果，造物者始终在第一位
+        const sortedEntries = creatorEntry ? [creatorEntry, ...otherEntries] : otherEntries;
+        
+        console.log("生成的排行榜条目:", sortedEntries);
+        console.log("排行榜条目数量:", sortedEntries.length);
+        
+        if (sortedEntries.length > 0) {
+            setLeaderboardData(sortedEntries);
+            addToast(`成功获取 ${sortedEntries.length} 个用户的排行榜数据`, "info");
+        } else {
+            // 如果没有任何数据，显示空排行榜
+            console.log("没有找到任何用户数据");
+            setLeaderboardData([]);
+            addToast("没有找到任何用户数据", "info");
+        }
+    } catch (e: any) {
+        console.error("Leaderboard Fetch Error", e);
+        addToast(`获取排行榜失败: ${e.message}`, "error");
+        // 即使出错，也设置空数据，避免界面卡住
+        setLeaderboardData([]);
+    } finally {
+        setIsLeaderboardLoading(false);
+        console.log("排行榜数据获取完成");
+    }
+  };
+
+  // Friends System Functions
+  const fetchFriends = async () => {
+    if (!currentUserId) return;
+    
+    try {
+      // 获取好友列表
+      const { data: friendsData, error } = await supabase
+        .from('friend_relationships')
+        .select(`
+          id, status, created_at, updated_at,
+          friend:profiles!friend_relationships_friend_id_fkey(id, email, created_at)
+        `)
+        .eq('user_id', currentUserId)
+        .eq('status', 'accepted');
+      
+      if (!error && friendsData) {
+        const friendsList: Friend[] = friendsData.map(rel => ({
+          id: rel.friend.id,
+          email: rel.friend.email,
+          username: rel.friend.email.split('@')[0],
+          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${rel.friend.id}`,
+          lastActive: new Date(rel.updated_at).getTime(),
+          isOnline: false,
+          unreadCount: 0
+        }));
+        setFriends(friendsList);
+      }
+      
+      // 获取待处理的好友请求
+      const { data: requestsData, error: requestsError } = await supabase
+        .from('friend_relationships')
+        .select(`
+          id, created_at,
+          user:profiles!friend_relationships_user_id_fkey(id, email, created_at)
+        `)
+        .eq('friend_id', currentUserId)
+        .eq('status', 'pending');
+      
+      if (!requestsError && requestsData) {
+        const requestsList: FriendRequest[] = requestsData.map(rel => ({
+          id: rel.id,
+          userId: rel.user.id,
+          username: rel.user.email.split('@')[0],
+          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${rel.user.id}`,
+          createdAt: new Date(rel.created_at).getTime()
+        }));
+        setPendingRequests(requestsList);
+      }
+    } catch (error) {
+      console.error('获取好友数据失败:', error);
+    }
+  };
+
+  const sendFriendRequest = async (friendId: string) => {
+    if (!currentUserId) {
+      addToast('请先登录', 'error');
+      return false;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from('friend_relationships')
+        .insert({
+          user_id: currentUserId,
+          friend_id: friendId,
+          status: 'pending'
+        });
+      
+      if (error) {
+        if (error.code === '23505') {
+          addToast('好友申请已发送或已是好友', 'info');
+        } else {
+          addToast('发送好友申请失败', 'error');
+        }
+        return false;
+      }
+      
+      addToast('好友申请已发送', 'success');
+      return true;
+    } catch (error) {
+      console.error('发送好友申请失败:', error);
+      addToast('发送好友申请失败', 'error');
+      return false;
+    }
+  };
+
+  const acceptFriendRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('friend_relationships')
+        .update({ status: 'accepted', updated_at: new Date().toISOString() })
+        .eq('id', requestId);
+      
+      if (error) {
+        addToast('接受好友申请失败', 'error');
+        return false;
+      }
+      
+      addToast('好友申请已接受', 'success');
+      await fetchFriends(); // 刷新好友列表
+      return true;
+    } catch (error) {
+      console.error('接受好友申请失败:', error);
+      addToast('接受好友申请失败', 'error');
+      return false;
+    }
+  };
+
+  const rejectFriendRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabase
+        .from('friend_relationships')
+        .delete()
+        .eq('id', requestId);
+      
+      if (error) {
+        addToast('拒绝好友申请失败', 'error');
+        return false;
+      }
+      
+      addToast('好友申请已拒绝', 'success');
+      await fetchFriends(); // 刷新好友列表
+      return true;
+    } catch (error) {
+      console.error('拒绝好友申请失败:', error);
+      addToast('拒绝好友申请失败', 'error');
+      return false;
+    }
+  };
+
+  const removeFriend = async (friendId: string) => {
+    if (!currentUserId) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('friend_relationships')
+        .delete()
+        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`);
+      
+      if (error) {
+        addToast('删除好友失败', 'error');
+        return false;
+      }
+      
+      addToast('好友已删除', 'success');
+      await fetchFriends(); // 刷新好友列表
+      return true;
+    } catch (error) {
+      console.error('删除好友失败:', error);
+      addToast('删除好友失败', 'error');
+      return false;
+    }
+  };
+
+  const openChat = async (friend: Friend) => {
+    setCurrentChatFriend(friend);
+    setGameState(GameState.CHAT);
+    
+    // 获取聊天记录
+    if (currentUserId) {
+      try {
+        const { data, error } = await supabase
+          .from('chat_messages')
+          .select('*')
+          .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${currentUserId})`)
+          .order('created_at', { ascending: true });
+        
+        if (!error && data) {
+          const messages: ChatMessage[] = data.map(msg => ({
+            id: msg.id,
+            senderId: msg.sender_id,
+            receiverId: msg.receiver_id,
+            content: msg.content,
+            timestamp: new Date(msg.created_at).getTime(),
+            isRead: msg.is_read
+          }));
+          setChatMessages(messages);
+        }
+      } catch (error) {
+        console.error('获取聊天记录失败:', error);
+      }
+    }
+  };
+
+  const sendMessage = async (content: string) => {
+    if (!currentUserId || !currentChatFriend) return false;
+    
+    try {
+      const { error } = await supabase
+        .from('chat_messages')
+        .insert({
+          sender_id: currentUserId,
+          receiver_id: currentChatFriend.id,
+          content: content
+        });
+      
+      if (error) {
+        addToast('发送消息失败', 'error');
+        return false;
+      }
+      
+      // 添加新消息到本地状态
+      const newMessage: ChatMessage = {
+        id: Date.now().toString(),
+        senderId: currentUserId,
+        receiverId: currentChatFriend.id,
+        content: content,
+        timestamp: Date.now(),
+        isRead: false
+      };
+      setChatMessages(prev => [...prev, newMessage]);
+      
+      return true;
+    } catch (error) {
+      console.error('发送消息失败:', error);
+      addToast('发送消息失败', 'error');
+      return false;
+    }
+  };
+
+  const closeChat = () => {
+    setCurrentChatFriend(null);
+    setChatMessages([]);
+    setGameState(GameState.FRIENDS);
+  };
+
+  const openFriendsScreen = () => {
+    setGameState(GameState.FRIENDS);
+    if (currentUserId) {
+      fetchFriends();
+    }
+  };
+  
+  const toggleLeaderboardSort = () => {
+    setLeaderboardSortBy(prev => prev === 'registerTime' ? 'level' : 'registerTime');
+    // 重新获取排行榜数据以应用新的排序方式
+    fetchLeaderboard();
+  };
+
   // Email System Functions
+  const openEmailScreen = () => {
+    setGameState(GameState.EMAIL);
+    // 这里可以添加获取最新邮件的逻辑
+  };
+
+  const readEmail = (emailId: string) => {
+    setEmails(prev => prev.map(email => 
+      email.id === emailId ? { ...email, isRead: true } : email
+    ));
+    // 更新未读邮件数量
+    const count = emails.filter(email => !email.isRead && email.id !== emailId).length;
+    setUnreadEmailCount(count);
+  };
+
+  const claimEmail = (emailId: string) => {
+    const email = emails.find(e => e.id === emailId);
+    if (!email || email.isClaimed) return;
+
+    // 处理邮件附件奖励
+    email.attachments.forEach(attachment => {
+      switch (attachment.type) {
+        case EmailContentType.ITEM:
+          // 添加物品到背包
+          if (attachment.itemType) {
+            addToInventory(attachment.itemType);
+          }
+          break;
+        case EmailContentType.LEVEL:
+          // 提升等级
+          if (attachment.level) {
+            setStats(prev => ({
+              ...prev,
+              level: prev.level + (attachment.level || 0)
+            }));
+            addToast(`等级提升 +${attachment.level}`, 'loot');
+          }
+          break;
+        case EmailContentType.XP:
+          // 增加经验
+          if (attachment.xp) {
+            handleGainXp(attachment.xp);
+          }
+          break;
+        case EmailContentType.STONES:
+          // 增加召唤石
+          if (attachment.stones) {
+            setStats(prev => ({
+              ...prev,
+              summonStones: prev.summonStones + (attachment.stones || 0)
+            }));
+            addToast(`召唤石 +${attachment.stones}`, 'loot');
+          }
+          break;
+      }
+    });
+
+    // 标记邮件为已领取
+    setEmails(prev => prev.map(email => 
+      email.id === emailId ? { ...email, isClaimed: true } : email
+    ));
+
+    addToast('邮件奖励已领取', 'success');
+  };
+
+  const sendNotification = (data: {
+    subject: string;
+    content: string;
+    attachments: Array<{
+      type: EmailContentType;
+      itemType?: ItemType;
+      amount?: number;
+      level?: number;
+      xp?: number;
+      stones?: number;
+    }>;
+    sendToAll: boolean;
+    specificUserId?: string;
+  }) => {
+    // 这里可以添加发送通知到服务器的逻辑
+    // 现在我们先实现本地模拟
+
+    // 创建新邮件
+    const newEmail: Email = {
+      id: Date.now().toString(),
+      subject: data.subject,
+      content: data.content,
+      attachments: data.attachments,
+      isRead: false,
+      isClaimed: false,
+      timestamp: Date.now(),
+      sender: '系统'
+    };
+
+    // 添加到邮件列表
+    setEmails(prev => [newEmail, ...prev]);
+    setUnreadEmailCount(prev => prev + 1);
+
+    addToast('通知已发送', 'success');
+  };
+
+  const deleteEmail = (emailId: string) => {
+    setEmails(prev => prev.filter(email => email.id !== emailId));
+    // 更新未读邮件数量
+    const count = emails.filter(email => !email.isRead && email.id !== emailId).length;
+    setUnreadEmailCount(count);
+    addToast('邮件已删除', 'info');
+  };
+
   const initEmailSystem = () => {
-    // 使用包含用户ID的键来存储邮件初始化状态
-    const emailInitKey = `inf_emails_initialized_${currentUserId || 'anonymous'}`;
-    const hasInitializedEmails = localStorage.getItem(emailInitKey);
-    if (!hasInitializedEmails) {
-      // 第一次登录，添加初始邮件
+    // 获取当前用户ID
+    const userId = currentUserId || 'guest';
+    
+    // 为每个用户创建独立的localStorage键
+    const hasInitialEmailsKey = `inf_has_initial_emails_${userId}`;
+    const emailsKey = `inf_emails_${userId}`;
+    
+    // 检查用户是否已经收到过初始邮件
+    const hasReceivedInitialEmails = localStorage.getItem(hasInitialEmailsKey);
+    
+    // 如果用户已经收到过初始邮件，从localStorage加载邮件
+    const savedEmails = localStorage.getItem(emailsKey);
+    if (savedEmails) {
+      try {
+        const emails = JSON.parse(savedEmails);
+        setEmails(emails);
+        setUnreadEmailCount(emails.filter((email: Email) => !email.isRead).length);
+        return;
+      } catch (e) {
+        console.error('Failed to load saved emails:', e);
+      }
+    }
+    
+    // 只有第一次登录的用户才会收到初始邮件
+    if (!hasReceivedInitialEmails) {
+      // 初始化邮件系统，添加一些示例邮件
       const sampleEmails: Email[] = [
         {
           id: '1',
@@ -339,170 +1037,36 @@ const App: React.FC = () => {
           isClaimed: false,
           timestamp: Date.now() - 86400000,
           sender: '系统'
+        },
+        {
+          id: '2',
+          subject: '等级提升奖励',
+          content: '恭喜你成功提升到10级！这是你的等级奖励，请查收。',
+          attachments: [
+            {
+              type: EmailContentType.XP,
+              xp: 500
+            }
+          ],
+          isRead: true,
+          isClaimed: false,
+          timestamp: Date.now() - 43200000,
+          sender: '系统'
         }
       ];
 
       setEmails(sampleEmails);
       setUnreadEmailCount(sampleEmails.filter(email => !email.isRead).length);
       
-      // 标记为已初始化，防止重复添加
-      localStorage.setItem(emailInitKey, 'true');
+      // 标记用户已经收到过初始邮件
+      localStorage.setItem(hasInitialEmailsKey, 'true');
+      // 保存邮件到localStorage
+      localStorage.setItem(emailsKey, JSON.stringify(sampleEmails));
     } else {
-      // 不是第一次登录，从本地存储加载邮件
-      const savedEmails = localStorage.getItem('inf_emails');
-      if (savedEmails) {
-        const parsedEmails = JSON.parse(savedEmails);
-        setEmails(parsedEmails);
-        setUnreadEmailCount(parsedEmails.filter((email: Email) => !email.isRead).length);
-      }
-    }
-  };
-
-  const readEmail = (emailId: string) => {
-    setEmails(prev => prev.map(email => 
-      email.id === emailId ? { ...email, isRead: true } : email
-    ));
-    setUnreadEmailCount(prev => prev - 1);
-  };
-
-  const claimEmail = (emailId: string) => {
-    const email = emails.find(e => e.id === emailId);
-    if (!email) return;
-
-    // Process attachments
-    email.attachments.forEach(attachment => {
-      switch (attachment.type) {
-        case EmailContentType.ITEM:
-          if (attachment.itemType) {
-            const itemName = ITEMS_DB[attachment.itemType].name;
-            const itemDesc = BASE_ITEM_DESC[attachment.itemType];
-            const newItem: Item = {
-              id: Date.now().toString(),
-              type: attachment.itemType,
-              name: itemName,
-              description: itemDesc,
-              count: attachment.amount || 1
-            };
-            setInventory(prev => {
-              const existingItem = prev.find(item => item.type === attachment.itemType);
-              if (existingItem) {
-                return prev.map(item => 
-                  item.type === attachment.itemType 
-                    ? { ...item, count: item.count + (attachment.amount || 1) }
-                    : item
-                );
-              } else {
-                return [...prev, newItem];
-              }
-            });
-          }
-          break;
-        case EmailContentType.XP:
-          if (attachment.xp) {
-            handleGainXp(attachment.xp);
-          }
-          break;
-        case EmailContentType.STONES:
-          if (attachment.stones) {
-            setStats(prev => ({ ...prev, summonStones: prev.summonStones + attachment.stones }));
-          }
-          break;
-        case EmailContentType.LEVEL:
-          if (attachment.level) {
-            // Level up the player
-            for (let i = 0; i < attachment.level; i++) {
-              handleGainXp(stats.nextLevelXp);
-            }
-          }
-          break;
-      }
-    });
-
-    // Mark email as claimed
-    setEmails(prev => prev.map(email => 
-      email.id === emailId ? { ...email, isClaimed: true } : email
-    ));
-  };
-
-  const deleteEmail = (emailId: string) => {
-    setEmails(prev => prev.filter(email => email.id !== emailId));
-    // 更新未读邮件数量
-    const count = emails.filter(email => !email.isRead && email.id !== emailId).length;
-    setUnreadEmailCount(count);
-    addToast('邮件已删除', 'info');
-  };
-
-  const sendNotification = (data: {
-    subject: string;
-    content: string;
-    attachments: Array<{
-      type: EmailContentType;
-      itemType?: ItemType;
-      amount?: number;
-      level?: number;
-      xp?: number;
-      stones?: number;
-    }>;
-    sendToAll: boolean;
-    specificUserId?: string;
-  }) => {
-    const newEmail: Email = {
-      id: Date.now().toString(),
-      subject: data.subject,
-      content: data.content,
-      attachments: data.attachments,
-      isRead: false,
-      isClaimed: false,
-      timestamp: Date.now(),
-      sender: '系统'
-    };
-
-    setEmails(prev => [newEmail, ...prev]);
-    setUnreadEmailCount(prev => prev + 1);
-
-    addToast('通知已发送', 'success');
-  };
-
-  const fetchLeaderboard = async () => {
-    if (!isSupabaseConfigured()) {
-        addToast("请先连接云服务", "error");
-        return;
-    }
-    setIsLeaderboardLoading(true);
-    setGameState(GameState.LEADERBOARD);
-    
-    try {
-        // Since we can't easily order by JSONB fields without schema changes,
-        // we fetch the latest 50 updated saves and sort them client-side by level.
-        const { data, error } = await supabase
-            .from('game_saves')
-            .select('user_id, save_data, updated_at')
-            .order('updated_at', { ascending: false })
-            .limit(50);
-            
-        if (error) throw error;
-        
-        if (data) {
-            const entries: LeaderboardEntry[] = data.map(item => {
-                const s = item.save_data;
-                // Safe checks for potentially partial data
-                return {
-                    userId: item.user_id,
-                    username: s.profile?.username || 'Unknown Agent',
-                    avatarUrl: s.profile?.avatarUrl || 'https://placehold.co/100x100?text=?',
-                    title: s.profile?.title || 'Unknown',
-                    level: s.stats?.level || 1,
-                    updatedAt: new Date(item.updated_at).getTime()
-                };
-            }).sort((a, b) => b.level - a.level); // Client-side sort by level
-            
-            setLeaderboardData(entries);
-        }
-    } catch (e) {
-        console.error("Leaderboard Fetch Error", e);
-        addToast("获取排行榜失败", "error");
-    } finally {
-        setIsLeaderboardLoading(false);
+      // 如果用户已经收到过初始邮件，但没有保存的邮件，设置为空数组
+      setEmails([]);
+      setUnreadEmailCount(0);
+      localStorage.setItem(emailsKey, JSON.stringify([]));
     }
   };
 
@@ -513,7 +1077,12 @@ const App: React.FC = () => {
           if (data?.save_data) {
               const d = data.save_data;
               if (d.stats) setStats(d.stats);
-              if (d.profile) setUserProfile(d.profile);
+              if (d.profile) {
+                  // 更新用户资料，并确保称号正确
+                  const currentLevel = d.stats?.level || 1;
+                  const correctTitle = getTitleByLevel(currentLevel, userId);
+                  setUserProfile({ ...d.profile, title: correctTitle });
+              }
               if (d.inventory) setInventory(d.inventory);
               if (d.history) setHistory(d.history);
               if (d.stories) setStories(d.stories);
@@ -570,8 +1139,17 @@ const App: React.FC = () => {
   };
 
   const addToast = (msg: string, type: 'info' | 'loot' | 'error' = 'info') => {
-    const id = Date.now().toString() + Math.random();
-    setToasts(prev => [...prev, { id, message: msg, type }]);
+    // 检查是否已经存在相同的提示，防止重复显示
+    // 注意：使用函数式更新来获取最新的toasts状态
+    setToasts(prevToasts => {
+      const existingToast = prevToasts.find(toast => toast.message === msg && toast.type === type);
+      if (existingToast) {
+        return prevToasts; // 如果已经存在相同的提示，就不再添加
+      }
+      
+      const id = Date.now().toString() + Math.random();
+      return [...prevToasts, { id, message: msg, type }];
+    });
   };
   const removeToast = (id: string) => setToasts(prev => prev.filter(t => t.id !== id));
   const logEvent = (msg: string) => setEventLog(prev => [...prev, msg]);
@@ -582,6 +1160,12 @@ const App: React.FC = () => {
           if (levelsGained > 0) {
               addToast(`升级！Lv.${newStats.level} (HP+${hpGain}, MP+${mpGain})`, 'loot');
               setPlayer(prevPlayer => ({ ...prevPlayer, maxHp: prevPlayer.maxHp + hpGain, maxMp: prevPlayer.maxMp + mpGain, hp: prevPlayer.hp + hpGain, mp: prevPlayer.mp + mpGain }));
+              
+              // 更新称号
+              const newTitle = getTitleByLevel(newStats.level, currentUserId);
+              if (userProfile.title !== newTitle) {
+                  setUserProfile(prev => ({ ...prev, title: newTitle }));
+              }
           }
           return newStats;
       });
@@ -753,10 +1337,37 @@ const App: React.FC = () => {
 
   const handleUseItem = (item: Item) => {
       let consumed = false;
-      if (item.type === ItemType.HP_POTION) { if (player.hp < player.maxHp) { setPlayer(p => ({...p, hp: Math.min(p.maxHp, p.hp+10)})); consumed=true; } } 
-      else if (item.type === ItemType.MP_POTION) { if (player.mp < player.maxMp) { setPlayer(p => ({...p, mp: Math.min(p.maxMp, p.mp+5)})); consumed=true; } } 
-      else if (item.type.includes('XP')) { const amount = item.type === ItemType.XP_LARGE ? 100 : 30; addToast(`经验 +${amount}`, 'info'); handleGainXp(amount); consumed = true; } 
-      else if (item.type === ItemType.OMNI_KEY && !player.hasKey) { setPlayer(p=>({...p, hasKey:true})); consumed=true; }
+      if (item.type === ItemType.HP_POTION) { 
+        if (player.hp < player.maxHp) { 
+          setPlayer(p => ({...p, hp: Math.min(p.maxHp, p.hp+10)})); 
+          addToast(`HP +10`, 'info');
+          consumed=true; 
+        } else {
+          addToast(`HP 已满`, 'error');
+        }
+      } 
+      else if (item.type === ItemType.MP_POTION) { 
+        if (player.mp < player.maxMp) { 
+          setPlayer(p => ({...p, mp: Math.min(p.maxMp, p.mp+5)})); 
+          addToast(`MP +5`, 'info');
+          consumed=true; 
+        } else {
+          addToast(`MP 已满`, 'error');
+        }
+      } 
+      else if (item.type.includes('XP')) { 
+        const amount = item.type === ItemType.XP_LARGE ? 100 : 30; 
+        addToast(`经验 +${amount}`, 'info'); 
+        handleGainXp(amount); 
+        consumed = true; 
+      } 
+      else if (item.type === ItemType.OMNI_KEY && !player.hasKey) { 
+        setPlayer(p=>({...p, hasKey:true})); 
+        addToast(`获得万能钥匙`, 'info');
+        consumed=true; 
+      } else if (item.type === ItemType.OMNI_KEY && player.hasKey) {
+        addToast(`已经有万能钥匙了`, 'error');
+      }
       if(consumed) setInventory(prev => prev.map(i => i.id === item.id ? { ...i, count: i.count - 1 } : i).filter(i => i.count > 0));
   };
 
@@ -794,30 +1405,23 @@ const App: React.FC = () => {
             onOpenCreatorMode={() => setShowPasswordModal(true)}
             onResumeStory={handleResumeStory}
             onOpenLeaderboard={fetchLeaderboard}
-            onOpenEmail={() => setShowEmailScreen(true)}
+            onOpenFriends={openFriendsScreen}
+            onOpenEmail={openEmailScreen}
             unreadEmailCount={unreadEmailCount}
-        />
-      )}
-
-      {/* --- EMAIL SCREEN --- */}
-      {showEmailScreen && (
-        <EmailScreen 
-            emails={emails}
-            onBack={() => setShowEmailScreen(false)}
-            onReadEmail={readEmail}
-            onClaimEmail={claimEmail}
-            onDeleteEmail={deleteEmail}
         />
       )}
 
       {/* --- OTHER SCREENS --- */}
       {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} />}
+      {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.HANDBOOK && <HandbookScreen onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.HISTORY_VIEW && <HistoryScreen stories={stories} history={history} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.STORY_SELECT && <StorySelectScreen storyOptions={storyOptions} isRefreshing={isRefreshing} onSelectStory={handleSelectStory} onRefresh={() => handleStartStory(true)} onBack={() => setGameState(GameState.MENU)} />}
-      {gameState === GameState.LEADERBOARD && <LeaderboardScreen entries={leaderboardData} isLoading={isLeaderboardLoading} currentUserId={currentUserId} onBack={() => setGameState(GameState.MENU)} />}
+      {gameState === GameState.LEADERBOARD && <LeaderboardScreen entries={leaderboardData} isLoading={isLeaderboardLoading} sortBy={leaderboardSortBy} currentUserId={currentUserId} onBack={() => setGameState(GameState.MENU)} onToggleSort={toggleLeaderboardSort} onAddFriend={sendFriendRequest} />}
+      {gameState === GameState.FRIENDS && <FriendsScreen friends={friends} pendingRequests={pendingRequests} onBack={() => setGameState(GameState.MENU)} onOpenChat={openChat} onAcceptRequest={acceptFriendRequest} onRejectRequest={rejectFriendRequest} onRemoveFriend={removeFriend} />}
+      {gameState === GameState.CHAT && <ChatScreen friend={currentChatFriend} messages={chatMessages} currentUserId={currentUserId} onBack={closeChat} onSendMessage={sendMessage} />}
       {gameState === GameState.EXPLORING && <BackButton onBack={handleGameBack} label="撤退" />}
       {gameState === GameState.EXPLORING && theme && assets && <GameScreen grid={grid} player={player} theme={theme} assets={assets} onMove={handleMove} onBack={handleGameBack} stats={stats} />}
       {gameState === GameState.COMBAT && currentEnemy && theme && assets && (<CombatScreen player={player} enemy={currentEnemy} theme={theme} assets={assets} hero={heroes.find(h => h.id === activeHeroId) || DEFAULT_HERO} onWin={(hp, mp) => { setPlayer(p => ({...p, hp, mp})); setGrid(prev => { const [tx, ty] = currentEnemy.id.split('-').map(Number); return prev.map(c => (c.x === tx && c.y === ty) ? { ...c, type: CellType.EMPTY, visited: true } : c); }); setGameState(GameState.EXPLORING); setCurrentEnemy(null); handleGainXp(20); addToast("战斗胜利！", 'info'); }} onLose={() => { setFailedLevels(prev => [{ id: Date.now().toString(), timestamp: Date.now(), theme, assets, grid, enemyName: currentEnemy.name, storyId: currentStoryId }, ...prev]); if (currentStoryId) { setStories(prev => prev.map(s => s.id === currentStoryId ? { ...s, savedState: undefined } : s)); clearSession(); } setGameState(GameState.GAME_OVER); }} />)}

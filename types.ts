@@ -14,7 +14,10 @@ export enum GameState {
   CREATOR_MODE = 'CREATOR_MODE',
   DISCUSSION = 'DISCUSSION',
   LUCK = 'LUCK',
-  LEADERBOARD = 'LEADERBOARD'
+  LEADERBOARD = 'LEADERBOARD',
+  FRIENDS = 'FRIENDS',
+  CHAT = 'CHAT',
+  EMAIL = 'EMAIL'
 }
 
 export enum CellType {
@@ -213,6 +216,35 @@ export interface LeaderboardEntry {
   title: string;
   level: number;
   updatedAt: number;
+  createdAt: number; // 注册时间戳
+  isOnline: boolean; // 在线状态
+}
+
+export interface Friend {
+  id: string;
+  username: string;
+  email: string;
+  avatarUrl: string;
+  lastActive: number;
+  isOnline: boolean;
+  unreadCount: number;
+}
+
+export interface FriendRequest {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl: string;
+  createdAt: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  senderId: string;
+  receiverId: string;
+  content: string;
+  timestamp: number;
+  isRead: boolean;
 }
 
 export enum EmailContentType {

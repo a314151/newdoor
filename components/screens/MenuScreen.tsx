@@ -1,5 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { UserProfile, PlayerStats, StoryCampaign } from '../../types';
+
+// 版本号 - 与App.tsx中的DATA_VERSION保持同步
+const VERSION = "2.0.0";
 
 interface MenuScreenProps {
   userProfile: UserProfile;
@@ -22,6 +25,9 @@ interface MenuScreenProps {
   onOpenCreatorMode: () => void;
   onResumeStory: (story: StoryCampaign) => void;
   onOpenLeaderboard: () => void;
+  onOpenFriends: () => void;
+  onOpenEmail: () => void;
+  unreadEmailCount?: number;
 }
 
 const MenuScreen: React.FC<MenuScreenProps> = ({
@@ -44,13 +50,29 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenSettings,
   onOpenCreatorMode,
   onResumeStory,
-  onOpenLeaderboard
+  onOpenLeaderboard,
+  onOpenFriends,
+  onOpenEmail,
+  unreadEmailCount = 0
 }) => {
+  const [showFunctions, setShowFunctions] = useState(false);
+  
+  const handleFunctionClick = () => {
+    console.log('Function button clicked, current state:', showFunctions);
+    setShowFunctions(!showFunctions);
+    console.log('New state:', !showFunctions);
+  };
+  
   return (
     <div className="z-40 relative text-center flex flex-col items-center w-full max-w-md px-4 animate-fade-in">
-        <h1 className="text-4xl md:text-6xl font-bold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 pixel-font select-none">
-            无限之门
-        </h1>
+        <div className="w-full flex justify-center items-center mb-4">
+            <h1 className="text-4xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 pixel-font select-none">
+                无限之门
+            </h1>
+            <span className="ml-3 text-xs text-slate-400 bg-slate-800/80 px-2 py-1 rounded border border-slate-700">
+                v{VERSION}
+            </span>
+        </div>
         
         {/* PROFILE HEADER */}
         <div className="w-full mb-6 p-4 rounded-lg bg-slate-900/80 border border-slate-700 flex items-center gap-4 relative group shadow-lg">
@@ -61,8 +83,21 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
                 <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
             </button>
             <div className="text-left flex-1 min-w-0">
-                <div className="text-xs text-slate-500 mb-1 flex items-center gap-2">
-                    {userProfile.title}
+                <div className="text-xs mb-1 flex items-center gap-2">
+                    <span className={`${(() => {
+                        switch (userProfile.title) {
+                            case '造物者': return 'text-yellow-500 animate-pulse';
+                            case '众山小': return 'text-yellow-400';
+                            case '凌绝顶': return 'text-orange-400';
+                            case '威震一方': return 'text-purple-400';
+                            case '小有成就': return 'text-blue-400';
+                            case '初出茅庐': return 'text-green-400';
+                            case '新人': return 'text-red-400';
+                            default: return 'text-slate-500';
+                        }
+                    })()}`}>
+                        {userProfile.title}
+                    </span>
                     {agentRank && (
                         <span className="text-[10px] text-yellow-500 bg-yellow-900/20 px-1.5 rounded border border-yellow-900/50 font-mono animate-pulse">
                             NO.{String(agentRank).padStart(4, '0')}
@@ -153,23 +188,57 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
         </div>
 
         <div className="w-full grid grid-cols-4 gap-2 mt-8">
-            <button onClick={onOpenHistory} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-slate-500 hover:text-slate-300">
-                <span className="text-lg">📜</span>
-                <span className="text-[10px]">历史</span>
-            </button>
-             <button onClick={onOpenInventory} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-slate-500 hover:text-slate-300">
-                <span className="text-lg">🎒</span>
-                <span className="text-[10px]">背包</span>
-            </button>
-             <button onClick={onOpenLeaderboard} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-yellow-600 hover:text-yellow-400">
+            {/* 功能按钮 - 上拉菜单 */}
+            <div className="relative z-50">
+                <button 
+                    onClick={handleFunctionClick}
+                    className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-slate-500 hover:text-slate-300 w-full"
+                >
+                    <span className="text-lg">⚡</span>
+                    <span className="text-[10px]">功能</span>
+                </button>
+                {showFunctions && (
+                    <div className="absolute bottom-full left-0 mb-1 w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-60">
+                        <button onClick={onOpenHistory} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
+                            📜 历史
+                        </button>
+                        <button onClick={onOpenInventory} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
+                            🎒 背包
+                        </button>
+                        <button onClick={onOpenFriends} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
+                            👥 好友
+                        </button>
+                    </div>
+                )}
+            </div>
+            
+            {/* 排名按钮 */}
+            <button onClick={onOpenLeaderboard} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-yellow-600 hover:text-yellow-400">
                 <span className="text-lg">🏆</span>
                 <span className="text-[10px] font-bold">排名</span>
             </button>
-             <button onClick={onOpenSettings} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-slate-500 hover:text-slate-300">
+            
+            {/* 系统通知按钮 */}
+            <div className="relative">
+                <button onClick={onOpenEmail} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-blue-600 hover:text-blue-400">
+                    <span className="text-lg">📧</span>
+                    <span className="text-[10px]">通知</span>
+                </button>
+                {unreadEmailCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-4 h-4 flex items-center justify-center rounded-full">
+                        {unreadEmailCount}
+                    </span>
+                )}
+            </div>
+            
+            {/* 设置按钮 */}
+            <button onClick={onOpenSettings} className="flex flex-col items-center gap-1 p-2 rounded hover:bg-slate-800/50 transition-colors text-slate-500 hover:text-slate-300">
                 <span className="text-lg">⚙️</span>
                 <span className="text-[10px]">设置</span>
             </button>
         </div>
+        
+
             
         <button 
             onClick={onOpenCreatorMode} 

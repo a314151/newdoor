@@ -18,6 +18,9 @@ const DiscussionScreen: React.FC<DiscussionScreenProps> = ({ hero, theme, aiConf
   const [isLoading, setIsLoading] = useState(true);
   const [customInput, setCustomInput] = useState("");
   const [showInput, setShowInput] = useState(false);
+  const [crackProgress, setCrackProgress] = useState(40); // 初始破解进度为40%
+  const [hasCracked, setHasCracked] = useState(false); // 是否成功破解
+  const [hasFailed, setHasFailed] = useState(false); // 是否破解失败
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Initial load
@@ -51,10 +54,29 @@ const DiscussionScreen: React.FC<DiscussionScreenProps> = ({ hero, theme, aiConf
         
         setMessages(prev => [...prev, { role: 'monster', content: response.monsterText }]);
         
-        if (response.isFinished || round >= 8) {
-            // End conversation
+        // Calculate crack progress change (15-20%)
+        if (playerResponse) {
+            const progressChange = Math.floor(Math.random() * 6) + 15; // 15-20%
+            const newProgress = crackProgress + progressChange;
+            
+            if (newProgress >= 100) {
+                // Crack successful
+                setCrackProgress(100);
+                setHasCracked(true);
+                // End conversation with success
+                setTimeout(() => {
+                    onComplete();
+                }, 3000);
+            } else {
+                // Update progress
+                setCrackProgress(newProgress);
+            }
+        }
+        
+        if (!hasCracked && (response.isFinished || round >= 8)) {
+            // End conversation without cracking
             setTimeout(onComplete, 3000); // Give time to read before closing
-        } else {
+        } else if (!hasCracked) {
             setOptions(response.options);
             setRound(r => r + 1);
         }
@@ -73,15 +95,35 @@ const DiscussionScreen: React.FC<DiscussionScreenProps> = ({ hero, theme, aiConf
       <div className="w-full max-w-lg h-[80vh] flex flex-col bg-slate-900 border-2 border-blue-500 rounded-lg shadow-2xl overflow-hidden">
         
         {/* Header */}
-        <div className="bg-blue-900/30 p-4 border-b border-blue-800 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <span className="text-3xl">💬</span>
-                <div>
-                    <h3 className="text-blue-300 font-bold pixel-font">初心试炼</h3>
-                    <p className="text-[10px] text-slate-400">Round {round}/8</p>
+        <div className="bg-blue-900/30 p-4 border-b border-blue-800">
+            <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                    <span className="text-3xl">💬</span>
+                    <div>
+                        <h3 className="text-blue-300 font-bold pixel-font">初心试炼</h3>
+                        <p className="text-[10px] text-slate-400">Round {round}/8</p>
+                    </div>
                 </div>
+                <button onClick={onComplete} className="text-slate-500 hover:text-white text-xs">跳过</button>
             </div>
-            <button onClick={onComplete} className="text-slate-500 hover:text-white text-xs">跳过</button>
+            {/* Crack Progress Bar */}
+            <div className="w-full">
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-[10px] text-slate-400">破解进度</span>
+                    <span className="text-[10px] text-yellow-400 font-bold">{crackProgress}%</span>
+                </div>
+                <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-500 ease-out" 
+                        style={{ width: `${Math.min(100, crackProgress)}%` }}
+                    ></div>
+                </div>
+                {hasCracked && (
+                    <div className="text-center text-[10px] text-green-400 mt-1">
+                        破解成功！获得神秘奖励
+                    </div>
+                )}
+            </div>
         </div>
 
         {/* Chat Area */}
