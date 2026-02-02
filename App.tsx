@@ -30,7 +30,7 @@ import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
 
 // --- Constants ---
-const DATA_VERSION = "2.0.1"; 
+const DATA_VERSION = "2.0.2"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
