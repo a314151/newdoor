@@ -3,6 +3,7 @@ import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, 
 import { generateTheme, generateImage, generateStoryOptions, getPlaceholderImage, generateLevelNarrative, generateFullStory, generateHero } from './services/aiService';
 import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './services/gameLogic';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+import FriendsService from './services/friendsService';
 
 // Modular Component Imports
 import GameGrid from './components/GameGrid';
@@ -722,67 +723,16 @@ const App: React.FC = () => {
         }
       }
       
-      // 获取当前用户信息
-      const { data: currentUserData } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('id', currentUserId)
-        .single();
+      // 使用FriendsService发送好友申请通知
+      const success = await FriendsService.sendFriendRequestNotification(currentUserId, friendId);
       
-      if (currentUserData) {
-        // 获取对方用户信息
-        const { data: friendUserData } = await supabase
-          .from('profiles')
-          .select('id, email')
-          .eq('id', friendId)
-          .single();
-        
-        if (friendUserData) {
-          // 向对方发送邮件通知
-          const newEmail: Email = {
-            id: Date.now().toString(),
-            subject: '好友申请通知',
-            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 向你发送了好友申请。\n\n请点击下方按钮处理申请。`,
-            attachments: [
-              {
-                type: EmailContentType.ITEM,
-                itemType: ItemType.XP_SMALL
-              }
-            ],
-            isRead: false,
-            isClaimed: false,
-            timestamp: Date.now(),
-            sender: '系统',
-            friendRequest: {
-              requestId: Date.now().toString(),
-              senderId: currentUserId,
-              senderName: currentUserData.email.split('@')[0]
-            }
-          };
-          
-          // 模拟本地发送：将邮件保存到对方的 localStorage 中
-          const friendEmailsKey = `inf_emails_${friendId}`;
-          const friendSavedEmails = localStorage.getItem(friendEmailsKey);
-          let friendEmails: Email[] = [];
-          
-          if (friendSavedEmails) {
-            try {
-              friendEmails = JSON.parse(friendSavedEmails);
-            } catch (e) {
-              console.error('Failed to load friend saved emails:', e);
-            }
-          }
-          
-          // 添加新邮件到对方的邮件列表
-          friendEmails.unshift(newEmail);
-          localStorage.setItem(friendEmailsKey, JSON.stringify(friendEmails));
-          
-          console.log('向用户', friendUserData.email, '发送好友申请邮件');
-          addToast('好友申请通知已发送，对方将收到邮件', 'success');
-        }
+      if (success) {
+        addToast('好友申请通知已发送，对方将收到邮件', 'success');
+        return true;
+      } else {
+        addToast('发送好友申请失败', 'error');
+        return false;
       }
-      
-      return true;
     } catch (error) {
       console.error('发送好友申请失败:', error);
       addToast('发送好友申请失败', 'error');
@@ -1157,57 +1107,16 @@ const App: React.FC = () => {
   
   const handleRejectFriendRequest = async (senderId: string, emailId: string) => {
     try {
-      // 向发送方发送邮件通知
-      const { data: currentUserData } = await supabase
-        .from('profiles')
-        .select('id, email')
-        .eq('id', currentUserId)
-        .single();
+      // 使用FriendsService拒绝好友申请
+      const success = await FriendsService.rejectFriendRequest(currentUserId!, senderId);
       
-      if (currentUserData) {
-        const { data: senderUserData } = await supabase
-          .from('profiles')
-          .select('id, email')
-          .eq('id', senderId)
-          .single();
-        
-        if (senderUserData) {
-          // 向发送方发送邮件通知
-          const newEmail: Email = {
-            id: Date.now().toString(),
-            subject: '好友申请已拒绝',
-            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已拒绝了你的好友申请。\n\n不要灰心，继续寻找其他冒险者一起冒险吧！`,
-            attachments: [],
-            isRead: false,
-            isClaimed: false,
-            timestamp: Date.now(),
-            sender: '系统'
-          };
-          
-          // 模拟本地发送：将邮件保存到发送方的 localStorage 中
-          const senderEmailsKey = `inf_emails_${senderId}`;
-          const senderSavedEmails = localStorage.getItem(senderEmailsKey);
-          let senderEmails: Email[] = [];
-          
-          if (senderSavedEmails) {
-            try {
-              senderEmails = JSON.parse(senderSavedEmails);
-            } catch (e) {
-              console.error('Failed to load sender saved emails:', e);
-            }
-          }
-          
-          // 添加新邮件到发送方的邮件列表
-          senderEmails.unshift(newEmail);
-          localStorage.setItem(senderEmailsKey, JSON.stringify(senderEmails));
-          
-          console.log('向用户', senderUserData.email, '发送好友申请拒绝邮件');
-          addToast('好友申请已拒绝，对方将收到邮件通知', 'success');
-        }
+      if (success) {
+        addToast('好友申请已拒绝，对方将收到邮件通知', 'success');
+        // 删除邮件
+        deleteEmail(emailId);
+      } else {
+        addToast('拒绝好友申请失败', 'error');
       }
-      
-      // 删除邮件
-      deleteEmail(emailId);
     } catch (error) {
       console.error('拒绝好友申请失败:', error);
       addToast('拒绝好友申请失败', 'error');
