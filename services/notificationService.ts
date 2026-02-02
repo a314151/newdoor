@@ -1,6 +1,7 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import FriendsService from './friendsService';
 import { RealtimeChannel } from '@supabase/supabase-js'; // 导入类型定义
+import { Email, EmailContentType } from '../types';
 
 interface NotificationData {
   title: string;
@@ -12,12 +13,14 @@ interface NotificationData {
 interface NotificationServiceProps {
   onShowNotification: (data: NotificationData) => void;
   onAddToast: (message: string, type: 'info' | 'loot' | 'error') => void;
+  onAddEmail: (email: Email) => void;
   currentUserId: string | null;
 }
 
 class NotificationService {
   private onShowNotification: (data: NotificationData) => void;
   private onAddToast: (message: string, type: 'info' | 'loot' | 'error') => void;
+  private onAddEmail: (email: Email) => void;
   private currentUserId: string | null;
   // 在 V2 中，订阅返回的是 RealtimeChannel 对象
   private subscription: RealtimeChannel | null = null;
@@ -25,6 +28,7 @@ class NotificationService {
   constructor(props: NotificationServiceProps) {
     this.onShowNotification = props.onShowNotification;
     this.onAddToast = props.onAddToast;
+    this.onAddEmail = props.onAddEmail;
     this.currentUserId = props.currentUserId;
   }
 
@@ -63,6 +67,21 @@ class NotificationService {
             if (notification.message) {
               this.onAddToast(notification.message, 'info');
             }
+
+            // 创建邮件通知，添加到邮件系统中
+            const email: Email = {
+              id: notification.id,
+              subject: notification.type === 'friend_request' ? '好友申请' : '系统通知',
+              content: notification.message || '你收到了一条新通知',
+              attachments: [],
+              isRead: false,
+              isClaimed: false,
+              timestamp: new Date(notification.created_at || Date.now()).getTime(),
+              sender: '系统'
+            };
+            
+            // 将通知添加到邮件系统中
+            this.onAddEmail(email);
 
             // 针对好友申请类型的特殊处理：显示带有 接受/拒绝 按钮的弹窗
             if (notification.type === 'friend_request') {

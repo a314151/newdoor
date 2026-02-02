@@ -316,6 +316,10 @@ const App: React.FC = () => {
         setShowNotificationModal(true);
       },
       onAddToast: (message, type) => addToast(message, type),
+      onAddEmail: (email) => {
+        setEmails(prev => [email, ...prev]);
+        setUnreadEmailCount(prev => prev + 1);
+      },
       currentUserId
     });
 
