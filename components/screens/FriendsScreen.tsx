@@ -13,118 +13,78 @@ interface FriendsScreenProps {
 }
 
 const FriendsScreen: React.FC<FriendsScreenProps> = ({
-  friends,
-  pendingRequests,
-  onBack,
-  onOpenChat,
-  onAcceptRequest,
-  onRejectRequest,
-  onRemoveFriend
+  friends, pendingRequests, onBack, onOpenChat, onAcceptRequest, onRejectRequest, onRemoveFriend
 }) => {
   return (
-    <div className="z-40 relative text-center flex flex-col items-center w-full max-w-md px-4 animate-fade-in">
-      <BackButton onBack={onBack} label="返回" />
-      
-      <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 pixel-font mt-8 mb-8">
-        好友系统
+    <div className="z-40 relative flex flex-col items-center w-full max-w-md px-4 animate-fade-in h-full overflow-y-auto pb-10">
+      <div className="w-full flex justify-start pt-4"><BackButton onBack={onBack} label="返回游戏" /></div>
+
+      <h1 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 pixel-font my-6">
+        好友社交
       </h1>
-      
-      {/* 待处理请求 */}
+
+      {/* 待处理申请区域 */}
       {pendingRequests.length > 0 && (
-        <div className="w-full mb-8">
-          <h2 className="text-xl font-bold text-yellow-400 mb-4 flex items-center">
-            <span className="mr-2">📋</span> 待处理请求
-            <span className="ml-2 text-sm bg-yellow-400 text-black px-2 py-0.5 rounded-full">
-              {pendingRequests.length}
-            </span>
-          </h2>
-          <div className="space-y-3">
-            {pendingRequests.map((request) => (
-              <div key={request.id} className="flex items-center justify-between p-3 bg-slate-800/50 border border-slate-700 rounded-lg">
+        <div className="w-full mb-6">
+          <h2 className="text-sm font-bold text-yellow-500 uppercase tracking-widest mb-3 text-left px-2">待处理申请 ({pendingRequests.length})</h2>
+          <div className="space-y-2">
+            {pendingRequests.map((req) => (
+              <div key={req.id} className="flex items-center justify-between p-3 bg-slate-800/80 border border-yellow-500/30 rounded-xl shadow-lg">
                 <div className="flex items-center gap-3">
-                  <img 
-                    src={request.avatarUrl} 
-                    alt={request.username} 
-                    className="w-10 h-10 rounded-full border-2 border-slate-600"
-                  />
+                  <img src={req.avatarUrl} className="w-10 h-10 rounded-full border-2 border-yellow-500/50" alt="" />
                   <div className="text-left">
-                    <div className="font-bold text-white">{request.username}</div>
-                    <div className="text-xs text-slate-400">
-                      {new Date(request.createdAt).toLocaleString()}
-                    </div>
+                    <div className="text-white font-bold text-sm">{req.username}</div>
+                    <div className="text-[10px] text-slate-500">{new Date(req.timestamp).toLocaleDateString()}</div>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button 
-                    onClick={() => onAcceptRequest(request.id)}
-                    className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded text-sm font-bold transition-colors"
-                  >
-                    接受
-                  </button>
-                  <button 
-                    onClick={() => onRejectRequest(request.id)}
-                    className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm font-bold transition-colors"
-                  >
-                    拒绝
-                  </button>
+                  <button onClick={() => onAcceptRequest(req.id)} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-md text-xs font-bold transition-all">接受</button>
+                  <button onClick={() => onRejectRequest(req.id)} className="px-3 py-1 bg-slate-700 hover:bg-red-600 text-white rounded-md text-xs font-bold transition-all">拒绝</button>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-      
-      {/* 好友列表 */}
+
+      {/* 好友列表区域 */}
       <div className="w-full">
-        <h2 className="text-xl font-bold text-blue-400 mb-4 flex items-center">
-          <span className="mr-2">👥</span> 好友列表
-        </h2>
+        <h2 className="text-sm font-bold text-blue-400 uppercase tracking-widest mb-3 text-left px-2">我的好友</h2>
         {friends.length === 0 ? (
-          <div className="text-center py-10 text-slate-400">
-            <p className="mb-2">暂无好友</p>
-            <p className="text-sm">在排行榜中添加好友吧！</p>
+          <div className="bg-slate-800/30 rounded-2xl py-12 border border-dashed border-slate-700">
+            <p className="text-slate-500 text-sm">还没有好友，快去排行榜结交志同道合的人吧！</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {friends.map((friend) => (
-              <div 
-                key={friend.id} 
-                className="flex items-center justify-between p-3 bg-slate-800/50 border border-slate-700 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              <div
+                key={friend.id}
+                className="flex items-center justify-between p-4 bg-slate-800/60 border border-slate-700 rounded-xl hover:bg-slate-800 hover:border-blue-500/50 transition-all cursor-pointer group"
                 onClick={() => onOpenChat(friend)}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   <div className="relative">
-                    <img 
-                      src={friend.avatarUrl} 
-                      alt={friend.username} 
-                      className="w-12 h-12 rounded-full border-2 border-slate-600"
-                    />
-                    <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-800 ${
-                      friend.isOnline ? 'bg-green-400' : 'bg-slate-500'
-                    }`} />
+                    <img src={friend.avatarUrl} className="w-12 h-12 rounded-full border-2 border-slate-700 group-hover:border-blue-400 transition-all" alt="" />
+                    <span className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-slate-900 ${friend.isOnline ? 'bg-green-500' : 'bg-slate-500'}`} />
                   </div>
                   <div className="text-left">
-                    <div className="font-bold text-white flex items-center">
+                    <div className="font-bold text-white flex items-center gap-2">
                       {friend.username}
-                      {friend.unreadCount > 0 && (
-                        <span className="ml-2 text-xs bg-red-500 text-white px-2 py-0.5 rounded-full">
-                          {friend.unreadCount}
-                        </span>
-                      )}
+                      {friend.unreadCount > 0 && <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full animate-bounce">{friend.unreadCount}</span>}
                     </div>
-                    <div className="text-xs text-slate-400">
-                      {friend.isOnline ? '在线' : `最后在线: ${new Date(friend.lastActive).toLocaleString()}`}
+                    <div className="text-[10px] text-slate-500">
+                      {friend.isOnline ? <span className="text-green-400">正在探险</span> : `上次出现: ${new Date(friend.lastActive).toLocaleDateString()}`}
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveFriend(friend.id);
-                  }}
-                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-sm transition-colors"
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemoveFriend(friend.id); }}
+                  className="p-2 text-slate-500 hover:text-red-400 transition-colors"
+                  title="删除好友"
                 >
-                  删除
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
                 </button>
               </div>
             ))}
