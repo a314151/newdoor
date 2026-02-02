@@ -264,6 +264,12 @@ export interface EmailAttachment {
   stones?: number;
 }
 
+export interface FriendRequestInfo {
+  requestId: string;
+  senderId: string;
+  senderName: string;
+}
+
 export interface Email {
   id: string;
   subject: string;
@@ -273,6 +279,7 @@ export interface Email {
   isClaimed: boolean;
   timestamp: number;
   sender?: string;
+  friendRequest?: FriendRequestInfo;
 }
 
 declare global {

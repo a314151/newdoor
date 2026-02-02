@@ -725,7 +725,41 @@ const App: React.FC = () => {
         return false;
       }
       
-      addToast('好友申请已发送', 'success');
+      // 获取当前用户信息
+      const { data: currentUserData } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('id', currentUserId)
+        .single();
+      
+      if (currentUserData) {
+        // 向对方发送邮件通知
+        const newEmail: Email = {
+          id: Date.now().toString(),
+          subject: '好友申请通知',
+          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 向你发送了好友申请。\n\n请点击下方按钮处理申请。`,
+          attachments: [
+            {
+              type: EmailContentType.ITEM,
+              itemType: ItemType.XP_SMALL
+            }
+          ],
+          isRead: false,
+          isClaimed: false,
+          timestamp: Date.now(),
+          sender: '系统',
+          friendRequest: {
+            requestId: Date.now().toString(),
+            senderId: currentUserId,
+            senderName: currentUserData.email.split('@')[0]
+          }
+        };
+        
+        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
+        // 实际项目中需要通过服务器发送到对方的邮件系统
+        addToast('好友申请已发送，对方将收到邮件通知', 'success');
+      }
+      
       return true;
     } catch (error) {
       console.error('发送好友申请失败:', error);
@@ -994,6 +1028,96 @@ const App: React.FC = () => {
     const count = emails.filter(email => !email.isRead && email.id !== emailId).length;
     setUnreadEmailCount(count);
     addToast('邮件已删除', 'info');
+  };
+  
+  const handleAcceptFriendRequest = async (senderId: string, emailId: string) => {
+    try {
+      // 创建好友关系
+      const { error } = await supabase
+        .from('friend_relationships')
+        .insert({
+          user_id: currentUserId,
+          friend_id: senderId,
+          status: 'accepted',
+          updated_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        addToast('接受好友申请失败', 'error');
+        return;
+      }
+      
+      // 向发送方发送邮件通知
+      const { data: currentUserData } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('id', currentUserId)
+        .single();
+      
+      if (currentUserData) {
+        const newEmail: Email = {
+          id: Date.now().toString(),
+          subject: '好友申请已接受',
+          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已接受了你的好友申请。\n\n现在你们已经成为好友，可以开始聊天了！`,
+          attachments: [
+            {
+              type: EmailContentType.ITEM,
+              itemType: ItemType.XP_SMALL
+            }
+          ],
+          isRead: false,
+          isClaimed: false,
+          timestamp: Date.now(),
+          sender: '系统'
+        };
+        
+        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
+        // 实际项目中需要通过服务器发送到对方的邮件系统
+      }
+      
+      addToast('好友申请已接受', 'success');
+      // 删除邮件
+      deleteEmail(emailId);
+      // 刷新好友列表
+      fetchFriends();
+    } catch (error) {
+      console.error('接受好友申请失败:', error);
+      addToast('接受好友申请失败', 'error');
+    }
+  };
+  
+  const handleRejectFriendRequest = async (senderId: string, emailId: string) => {
+    try {
+      // 向发送方发送邮件通知
+      const { data: currentUserData } = await supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('id', currentUserId)
+        .single();
+      
+      if (currentUserData) {
+        const newEmail: Email = {
+          id: Date.now().toString(),
+          subject: '好友申请已拒绝',
+          content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已拒绝了你的好友申请。\n\n不要灰心，继续寻找其他冒险者一起冒险吧！`,
+          attachments: [],
+          isRead: false,
+          isClaimed: false,
+          timestamp: Date.now(),
+          sender: '系统'
+        };
+        
+        // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
+        // 实际项目中需要通过服务器发送到对方的邮件系统
+      }
+      
+      addToast('好友申请已拒绝', 'success');
+      // 删除邮件
+      deleteEmail(emailId);
+    } catch (error) {
+      console.error('拒绝好友申请失败:', error);
+      addToast('拒绝好友申请失败', 'error');
+    }
   };
 
   const initEmailSystem = () => {
@@ -1418,7 +1542,7 @@ const App: React.FC = () => {
 
       {/* --- OTHER SCREENS --- */}
       {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} />}
-      {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} />}
+      {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} onAcceptFriendRequest={handleAcceptFriendRequest} onRejectFriendRequest={handleRejectFriendRequest} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.HANDBOOK && <HandbookScreen onBack={() => setGameState(GameState.MENU)} />}

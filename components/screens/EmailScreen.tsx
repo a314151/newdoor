@@ -8,6 +8,8 @@ interface EmailScreenProps {
   onReadEmail: (emailId: string) => void;
   onClaimEmail: (emailId: string) => void;
   onDeleteEmail: (emailId: string) => void;
+  onAcceptFriendRequest?: (senderId: string, emailId: string) => void;
+  onRejectFriendRequest?: (senderId: string, emailId: string) => void;
 }
 
 const EmailScreen: React.FC<EmailScreenProps> = ({ 
@@ -15,7 +17,9 @@ const EmailScreen: React.FC<EmailScreenProps> = ({
   onBack, 
   onReadEmail, 
   onClaimEmail,
-  onDeleteEmail
+  onDeleteEmail,
+  onAcceptFriendRequest,
+  onRejectFriendRequest
 }) => {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
@@ -133,6 +137,24 @@ const EmailScreen: React.FC<EmailScreenProps> = ({
             >
               领取奖励
             </button>
+          )}
+          
+          {/* 好友申请处理按钮 */}
+          {selectedEmail.friendRequest && (
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => onAcceptFriendRequest && onAcceptFriendRequest(selectedEmail.friendRequest.senderId, selectedEmail.id)}
+                className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white font-bold rounded transition-colors"
+              >
+                接受申请
+              </button>
+              <button
+                onClick={() => onRejectFriendRequest && onRejectFriendRequest(selectedEmail.friendRequest.senderId, selectedEmail.id)}
+                className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded transition-colors"
+              >
+                拒绝申请
+              </button>
+            </div>
           )}
         </div>
       )}
