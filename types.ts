@@ -283,6 +283,14 @@ export interface Email {
   isInitialEmail?: boolean;
 }
 
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  createdAt: number;
+  isRead: boolean;
+}
+
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;

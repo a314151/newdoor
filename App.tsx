@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry, Friend, FriendRequest, ChatMessage, Email, EmailContentType } from './types';
+import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry, Friend, FriendRequest, ChatMessage, Email, EmailContentType, Announcement } from './types';
 import { generateTheme, generateImage, generateStoryOptions, getPlaceholderImage, generateLevelNarrative, generateFullStory, generateHero } from './services/aiService';
 import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './services/gameLogic';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import FriendsService from './services/friendsService';
 import NotificationService from './services/notificationService';
 import ChatService from './services/chatService';
+import AnnouncementService from './services/announcementService';
+import AnnouncementBar from './components/ui/AnnouncementBar';
 
 // Modular Component Imports
 import GameGrid from './components/GameGrid';
@@ -146,6 +148,7 @@ const App: React.FC = () => {
   const [useAiImages, setUseAiImages] = useState(true);
   const [heroes, setHeroes] = useState<Hero[]>([DEFAULT_HERO]);
   const [activeHeroId, setActiveHeroId] = useState<string>(DEFAULT_HERO.id);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   
   // --- Session State ---
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -165,6 +168,9 @@ const App: React.FC = () => {
   const [eventLog, setEventLog] = useState<string[]>([]); 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [storyOptions, setStoryOptions] = useState<string[]>([]);
+  
+  // Announcement Bar State
+  const [isAnnouncementVisible, setIsAnnouncementVisible] = useState(false);
   
   // Shop State
   const [summonInput, setSummonInput] = useState("");
@@ -255,6 +261,9 @@ const App: React.FC = () => {
         if (savedImageSetting !== null) setUseAiImages(JSON.parse(savedImageSetting));
         if (savedHeroes) setHeroes(JSON.parse(savedHeroes));
         if (savedActiveHero) setActiveHeroId(savedActiveHero);
+        
+        // 加载公告
+        loadAnnouncements();
         
         setIsDataLoaded(true); 
     };
@@ -417,6 +426,13 @@ const App: React.FC = () => {
     saveTimeoutRef.current = setTimeout(() => { saveToCloudSilent(); }, 4000);
     return () => { if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current); };
   }, [stats, userProfile, inventory, history, stories, heroes, activeHeroId]);
+
+  // 当数据加载完成后，如果有未读公告，自动显示公告栏
+  useEffect(() => {
+    if (isDataLoaded) {
+      loadAnnouncements();
+    }
+  }, [isDataLoaded]);
 
   const saveConfig = (provider: AIProvider, key: string, baseUrl?: string, model?: string) => {
     setAiConfig({ provider, apiKey: key, baseUrl, model });
@@ -1199,6 +1215,42 @@ const App: React.FC = () => {
       addToast("已退出登录", 'info');
   };
 
+  // --- Announcement Functions ---
+  const loadAnnouncements = () => {
+    const loadedAnnouncements = AnnouncementService.getAnnouncements();
+    setAnnouncements(loadedAnnouncements);
+  };
+
+  const showAnnouncementBar = () => {
+    setIsAnnouncementVisible(true);
+  };
+
+  const closeAnnouncementBar = () => {
+    setIsAnnouncementVisible(false);
+  };
+
+  const handleMarkAnnouncementAsRead = (id: string) => {
+    AnnouncementService.markAsRead(id);
+    loadAnnouncements();
+  };
+
+  const handleMarkAllAnnouncementsAsRead = () => {
+    AnnouncementService.markAllAsRead();
+    loadAnnouncements();
+  };
+
+  const handleAddAnnouncement = (title: string, content: string) => {
+    const newAnnouncement = AnnouncementService.addAnnouncement(title, content);
+    setAnnouncements(prev => [newAnnouncement, ...prev]);
+    addToast('公告发布成功', 'success');
+  };
+
+  const handleDeleteAnnouncement = (id: string) => {
+    AnnouncementService.deleteAnnouncement(id);
+    setAnnouncements(prev => prev.filter(announcement => announcement.id !== id));
+    addToast('公告删除成功', 'success');
+  };
+
   const checkApiKey = async () => {
     let currentApiKey = aiConfig.apiKey;
     const envApiKey = getSafeEnv('API_KEY');
@@ -1486,15 +1538,26 @@ const App: React.FC = () => {
             onOpenLeaderboard={fetchLeaderboard}
             onOpenFriends={openFriendsScreen}
             onOpenEmail={openEmailScreen}
+            onOpenAnnouncements={showAnnouncementBar}
             unreadEmailCount={unreadEmailCount}
+            unreadAnnouncementCount={AnnouncementService.getUnreadCount()}
         />
       )}
 
       {/* --- OTHER SCREENS --- */}
-      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} />}
+      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} onAddAnnouncement={handleAddAnnouncement} announcements={announcements} onDeleteAnnouncement={handleDeleteAnnouncement} />}
       {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} onAcceptFriendRequest={handleAcceptFriendRequest} onRejectFriendRequest={handleRejectFriendRequest} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onDeleteHero={(id) => { setHeroes(prev => prev.filter(h => h.id !== id)); addToast('英雄已删除', 'info'); }} onBack={() => setGameState(GameState.MENU)} />}
+
+      {/* Announcement Bar */}
+      <AnnouncementBar
+        announcements={announcements}
+        isVisible={isAnnouncementVisible}
+        onClose={closeAnnouncementBar}
+        onMarkAsRead={handleMarkAnnouncementAsRead}
+        onMarkAllAsRead={handleMarkAllAnnouncementsAsRead}
+      />
       {gameState === GameState.HANDBOOK && <HandbookScreen onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.HISTORY_VIEW && <HistoryScreen stories={stories} history={history} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.STORY_SELECT && <StorySelectScreen storyOptions={storyOptions} isRefreshing={isRefreshing} onSelectStory={handleSelectStory} onRefresh={() => handleStartStory(true)} onBack={() => setGameState(GameState.MENU)} />}

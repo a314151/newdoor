@@ -27,7 +27,9 @@ interface MenuScreenProps {
   onOpenLeaderboard: () => void;
   onOpenFriends: () => void;
   onOpenEmail: () => void;
+  onOpenAnnouncements: () => void;
   unreadEmailCount?: number;
+  unreadAnnouncementCount?: number;
 }
 
 const MenuScreen: React.FC<MenuScreenProps> = ({
@@ -53,7 +55,9 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenLeaderboard,
   onOpenFriends,
   onOpenEmail,
-  unreadEmailCount = 0
+  onOpenAnnouncements,
+  unreadEmailCount = 0,
+  unreadAnnouncementCount = 0
 }) => {
   const [showFunctions, setShowFunctions] = useState(false);
   
@@ -64,7 +68,7 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
   };
   
   return (
-    <div className="z-40 relative text-center flex flex-col items-center w-full max-w-md px-4 animate-fade-in">
+    <div className="z-40 relative text-center flex flex-col items-center w-full max-w-4xl px-4 animate-fade-in">
         <div className="w-full flex justify-center items-center mb-4">
             <h1 className="text-4xl md:text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 pixel-font select-none">
                 无限之门
@@ -74,49 +78,72 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
             </span>
         </div>
         
-        {/* PROFILE HEADER */}
-        <div className="w-full mb-6 p-4 rounded-lg bg-slate-900/80 border border-slate-700 flex items-center gap-4 relative group shadow-lg">
-            <button 
-                onClick={onOpenProfile}
-                className="relative w-16 h-16 rounded-full border-2 border-slate-500 overflow-hidden bg-black hover:border-yellow-400 transition-colors"
-            >
-                <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
-            </button>
-            <div className="text-left flex-1 min-w-0">
-                <div className="text-xs mb-1 flex items-center gap-2">
-                    <span className={`${(() => {
-                        switch (userProfile.title) {
-                            case '造物者': return 'text-yellow-500 animate-pulse';
-                            case '众山小': return 'text-yellow-400';
-                            case '凌绝顶': return 'text-orange-400';
-                            case '威震一方': return 'text-purple-400';
-                            case '小有成就': return 'text-blue-400';
-                            case '初出茅庐': return 'text-green-400';
-                            case '新人': return 'text-red-400';
-                            default: return 'text-slate-500';
-                        }
-                    })()}`}>
-                        {userProfile.title}
-                    </span>
-                    {agentRank && (
-                        <span className="text-[10px] text-yellow-500 bg-yellow-900/20 px-1.5 rounded border border-yellow-900/50 font-mono animate-pulse">
-                            NO.{String(agentRank).padStart(4, '0')}
+        {/* PROFILE AND ANNOUNCEMENT HEADER */}
+        <div className="w-full mb-6 flex gap-4">
+            {/* PROFILE HEADER */}
+            <div className="w-2/3 p-4 rounded-lg bg-slate-900/80 border border-slate-700 flex items-center gap-4 relative group shadow-lg">
+                <button 
+                    onClick={onOpenProfile}
+                    className="relative w-16 h-16 rounded-full border-2 border-slate-500 overflow-hidden bg-black hover:border-yellow-400 transition-colors"
+                >
+                    <img src={userProfile.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                </button>
+                <div className="text-left flex-1 min-w-0">
+                    <div className="text-xs mb-1 flex items-center gap-2">
+                        <span className={`${(() => {
+                            switch (userProfile.title) {
+                                case '造物者': return 'text-yellow-500 animate-pulse';
+                                case '众山小': return 'text-yellow-400';
+                                case '凌绝顶': return 'text-orange-400';
+                                case '威震一方': return 'text-purple-400';
+                                case '小有成就': return 'text-blue-400';
+                                case '初出茅庐': return 'text-green-400';
+                                case '新人': return 'text-red-400';
+                                default: return 'text-slate-500';
+                            }
+                        })()}`}>
+                            {userProfile.title}
                         </span>
-                    )}
+                        {agentRank && (
+                            <span className="text-[10px] text-yellow-500 bg-yellow-900/20 px-1.5 rounded border border-yellow-900/50 font-mono animate-pulse">
+                                NO.{String(agentRank).padStart(4, '0')}
+                            </span>
+                        )}
+                    </div>
+                    <div className="font-bold text-lg text-white truncate">{userProfile.username}</div>
+                    <div className="text-[10px] text-slate-400 flex gap-2">
+                        <span>LV.{stats.level}</span>
+                        <span className="text-slate-600">|</span>
+                        <span className="text-yellow-400">💎 {stats.summonStones}</span>
+                    </div>
                 </div>
-                <div className="font-bold text-lg text-white truncate">{userProfile.username}</div>
-                <div className="text-[10px] text-slate-400 flex gap-2">
-                    <span>LV.{stats.level}</span>
-                    <span className="text-slate-600">|</span>
-                    <span className="text-yellow-400">💎 {stats.summonStones}</span>
+                <button 
+                   onClick={onOpenProfile}
+                   className="absolute right-4 top-4 text-slate-500 hover:text-white transition-colors"
+                >
+                   ✎
+                </button>
+            </div>
+            
+            {/* ANNOUNCEMENT BAR */}
+            <div 
+                onClick={onOpenAnnouncements}
+                className="w-1/3 p-4 rounded-lg bg-slate-900/80 border border-slate-700 shadow-lg cursor-pointer hover:border-blue-500 hover:bg-slate-800/80 transition-all duration-300"
+            >
+                <div className="text-left relative">
+                    <div className="flex justify-between items-center mb-2">
+                        <div className="font-bold text-white text-sm">公告栏</div>
+                        {unreadAnnouncementCount > 0 && (
+                            <span className="text-xs bg-yellow-800 text-yellow-200 px-2 py-0.5 rounded-full">
+                                {unreadAnnouncementCount}
+                            </span>
+                        )}
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                        {unreadAnnouncementCount > 0 ? `您有 ${unreadAnnouncementCount} 条未读公告` : '点击查看系统公告'}
+                    </div>
                 </div>
             </div>
-            <button 
-               onClick={onOpenProfile}
-               className="absolute right-4 top-4 text-slate-500 hover:text-white transition-colors"
-            >
-               ✎
-            </button>
         </div>
         
         {/* AUTH / SYNC UI */}

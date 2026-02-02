@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import Header from '../ui/Header';
-import { PlayerStats, EmailContentType, ItemType } from '../../types';
+import { PlayerStats, EmailContentType, ItemType, Announcement } from '../../types';
 import { calculateMaxStats } from '../../services/gameLogic';
 
 interface CreatorModeScreenProps {
@@ -22,9 +22,12 @@ interface CreatorModeScreenProps {
     sendToAll: boolean;
     specificUserId?: string;
   }) => Promise<void>;
+  onAddAnnouncement?: (title: string, content: string) => void;
+  announcements?: Announcement[];
+  onDeleteAnnouncement?: (id: string) => void;
 }
 
-const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification }) => {
+const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification, onAddAnnouncement, announcements = [], onDeleteAnnouncement }) => {
   const maxStats = calculateMaxStats(stats.level);
   
   // 发送通知的状态
@@ -32,6 +35,10 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
   const [notificationContent, setNotificationContent] = useState('');
   const [sendToAll, setSendToAll] = useState(true);
   const [specificUserId, setSpecificUserId] = useState('');
+  
+  // 发布公告的状态
+  const [announcementTitle, setAnnouncementTitle] = useState('');
+  const [announcementContent, setAnnouncementContent] = useState('');
   
   // 附件状态
   const [attachments, setAttachments] = useState<Array<{
@@ -97,6 +104,21 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
     setAttachments([]);
     setSendToAll(true);
     setSpecificUserId('');
+  };
+
+  const handleAddAnnouncement = () => {
+    if (!onAddAnnouncement) return;
+    
+    if (!announcementTitle || !announcementContent) {
+      alert('请填写公告标题和内容');
+      return;
+    }
+    
+    onAddAnnouncement(announcementTitle, announcementContent);
+    
+    // 重置表单
+    setAnnouncementTitle('');
+    setAnnouncementContent('');
   };
 
   const handleChange = (field: keyof PlayerStats, value: number) => {
@@ -315,6 +337,79 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
                     📧 发送通知
                 </button>
             </div>
+        </div>
+        
+        {/* 发布公告功能 */}
+        <div className="bg-slate-800 p-4 rounded border border-slate-700">
+            <h3 className="text-green-400 font-bold mb-4 border-b border-slate-600 pb-2">发布系统公告</h3>
+            
+            <div className="space-y-4">
+                {/* 公告标题 */}
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">公告标题</label>
+                    <input 
+                        type="text" 
+                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white"
+                        value={announcementTitle}
+                        onChange={(e) => setAnnouncementTitle(e.target.value)}
+                        placeholder="请输入公告标题"
+                    />
+                </div>
+                
+                {/* 公告内容 */}
+                <div>
+                    <label className="block text-xs text-slate-400 mb-1">公告内容</label>
+                    <textarea 
+                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white h-32"
+                        value={announcementContent}
+                        onChange={(e) => setAnnouncementContent(e.target.value)}
+                        placeholder="请输入公告内容"
+                    />
+                </div>
+                
+                {/* 发布按钮 */}
+                <button 
+                    onClick={handleAddAnnouncement}
+                    disabled={!announcementTitle || !announcementContent || !onAddAnnouncement}
+                    className="w-full py-3 bg-yellow-900/50 hover:bg-yellow-800 border border-yellow-600 rounded text-yellow-100 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    📢 发布公告
+                </button>
+            </div>
+        </div>
+        
+        {/* 公告管理功能 */}
+        <div className="bg-slate-800 p-4 rounded border border-slate-700">
+            <h3 className="text-green-400 font-bold mb-4 border-b border-slate-600 pb-2">公告管理</h3>
+            
+            {announcements.length === 0 ? (
+                <div className="text-center text-slate-400 py-4">
+                    暂无公告
+                </div>
+            ) : (
+                <div className="space-y-3">
+                    {announcements.map(announcement => (
+                        <div key={announcement.id} className="flex justify-between items-center p-3 bg-slate-900/50 rounded border border-slate-700">
+                            <div className="flex-1 min-w-0">
+                                <div className="font-bold text-white text-sm mb-1 truncate">{announcement.title}</div>
+                                <div className="text-xs text-slate-400 mb-1 line-clamp-2">{announcement.content}</div>
+                                <div className="text-xs text-slate-500">
+                                    {new Date(announcement.createdAt).toLocaleString()}
+                                    {!announcement.isRead && (
+                                        <span className="ml-2 text-yellow-500">未读</span>
+                                    )}
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => onDeleteAnnouncement?.(announcement.id)}
+                                className="ml-4 px-3 py-1 bg-red-900/50 hover:bg-red-800 border border-red-600 rounded text-red-100 text-xs font-bold transition-colors"
+                            >
+                                删除
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
       </div>
     </div>
