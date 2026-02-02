@@ -104,7 +104,7 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ entries, isLoadin
                                     onClick={() => onAddFriend(entry.userId)}
                                     className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
                                 >
-                                    申请好友
+                                    发送申请通知
                                 </button>
                             )}
                         </div>

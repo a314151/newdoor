@@ -30,7 +30,7 @@ import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
 
 // --- Constants ---
-const DATA_VERSION = "2.0.3"; 
+const DATA_VERSION = "2.0.4"; 
 
 const DEFAULT_HERO: Hero = {
     id: 'default_adventurer',
@@ -722,24 +722,6 @@ const App: React.FC = () => {
         }
       }
       
-      // 插入好友申请
-      const { error } = await supabase
-        .from('friend_relationships')
-        .insert({
-          user_id: currentUserId,
-          friend_id: friendId,
-          status: 'pending'
-        });
-      
-      if (error) {
-        if (error.code === '23505') {
-          addToast('好友申请已发送，对方将收到邮件通知', 'info');
-        } else {
-          addToast('发送好友申请失败', 'error');
-          return false;
-        }
-      }
-      
       // 获取当前用户信息
       const { data: currentUserData } = await supabase
         .from('profiles')
@@ -796,7 +778,7 @@ const App: React.FC = () => {
           localStorage.setItem(friendEmailsKey, JSON.stringify(friendEmails));
           
           console.log('向用户', friendUserData.email, '发送好友申请邮件');
-          addToast('好友申请已发送，对方将收到邮件通知', 'success');
+          addToast('好友申请通知已发送，对方将收到邮件', 'success');
         }
       }
       
