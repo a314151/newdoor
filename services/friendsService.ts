@@ -2,7 +2,7 @@ import { supabase } from './supabaseClient';
 import { Friend, FriendRequest } from '../types';
 
 class FriendsService {
-  // 1. 获取好友列表：修复查询逻辑，确保正确获取双向好友关系
+  // 1. 获取好友列表：修复查询逻辑，确保正确获取双向好友关系，并与排行榜保持一致的名称和头像
   static async getFriends(userId: string): Promise<Friend[]> {
     try {
       console.log('正在获取用户好友列表，UID:', userId);
@@ -51,6 +51,22 @@ class FriendsService {
               profileMap.set(profile.id, profile);
             });
 
+            // 批量获取好友的游戏存档数据
+            const { data: saves, error: savesError } = await supabase
+              .from('game_saves')
+              .select('user_id, save_data')
+              .in('user_id', Array.from(friendIds));
+
+            if (savesError) {
+              console.error('获取好友游戏存档错误:', savesError);
+            }
+
+            // 创建游戏存档映射
+            const saveMap = new Map<string, any>();
+            saves?.forEach(save => {
+              saveMap.set(save.user_id, save);
+            });
+
             // 构建好友列表
             data.forEach(rel => {
               let friendId: string;
@@ -62,11 +78,20 @@ class FriendsService {
 
               const profile = profileMap.get(friendId);
               if (profile) {
+                // 获取好友的游戏存档数据
+                const friendSave = saveMap.get(friendId);
+                const saveData = friendSave?.save_data || {};
+                const friendProfile = saveData.profile || {};
+
+                // 使用与排行榜相同的方式获取用户名和头像
+                const username = friendProfile.username || profile.email || `Agent ${friendId.substring(0, 8)}`;
+                const avatarUrl = friendProfile.avatarUrl || 'https://placehold.co/100x100?text=?';
+
                 friendsMap.set(friendId, {
                   id: profile.id,
                   email: profile.email,
-                  username: profile.email.split('@')[0],
-                  avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${profile.id}`,
+                  username: username,
+                  avatarUrl: avatarUrl,
                   lastActive: new Date(rel.updated_at).getTime(),
                   isOnline: false,
                   unreadCount: 0
@@ -216,7 +241,7 @@ class FriendsService {
     }
   }
 
-  // 4. 获取待处理的好友申请
+  // 4. 获取待处理的好友申请：使用与排行榜相同的方式获取用户名称和头像
   static async getFriendRequests(userId: string): Promise<FriendRequest[]> {
     try {
       console.log('获取待处理好友申请:', userId);
@@ -251,21 +276,46 @@ class FriendsService {
         return [];
       }
 
+      // 批量获取发送者的游戏存档数据
+      const { data: saves, error: savesError } = await supabase
+        .from('game_saves')
+        .select('user_id, save_data')
+        .in('user_id', senderIds);
+
+      if (savesError) {
+        console.error('获取发送者游戏存档错误:', savesError);
+      }
+
       // 创建发送者信息映射
       const senderMap = new Map<string, any>();
       senders?.forEach(sender => {
         senderMap.set(sender.id, sender);
       });
 
+      // 创建游戏存档映射
+      const saveMap = new Map<string, any>();
+      saves?.forEach(save => {
+        saveMap.set(save.user_id, save);
+      });
+
       // 构建好友申请列表
       return data.map((req: any) => {
         const sender = senderMap.get(req.user_id);
         if (sender) {
+          // 获取发送者的游戏存档数据
+          const senderSave = saveMap.get(req.user_id);
+          const saveData = senderSave?.save_data || {};
+          const senderProfile = saveData.profile || {};
+
+          // 使用与排行榜相同的方式获取用户名和头像
+          const username = senderProfile.username || sender.email || `Agent ${req.user_id.substring(0, 8)}`;
+          const avatarUrl = senderProfile.avatarUrl || 'https://placehold.co/100x100?text=?';
+
           return {
             id: req.id,
             userId: sender.id,
-            username: sender.email.split('@')[0],
-            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${sender.id}`,
+            username: username,
+            avatarUrl: avatarUrl,
             timestamp: new Date(req.created_at).getTime()
           };
         } else {
@@ -273,7 +323,7 @@ class FriendsService {
             id: req.id,
             userId: req.user_id,
             username: '未知用户',
-            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${req.user_id}`,
+            avatarUrl: 'https://placehold.co/100x100?text=?',
             timestamp: new Date(req.created_at).getTime()
           };
         }
