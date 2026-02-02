@@ -30,54 +30,31 @@ class FriendsService {
         return false;
       }
       
-      // 检查是否已经存在好友关系
-      const { data: existingRelationship, error: checkError } = await supabase
+      // 使用upsert操作，自动处理冲突
+      const { data, error } = await supabase
         .from('friend_relationships')
-        .select('id, status')
-        .or(`and(user_id.eq.${currentUserId},friend_id.eq.${friendId}),and(user_id.eq.${friendId},friend_id.eq.${currentUserId})`)
-        .single();
-      
-      let requestId: string;
-      
-      if (!checkError && existingRelationship) {
-        // 如果已经存在好友关系，更新其状态为pending
-        const { data: updatedData, error: updateError } = await supabase
-          .from('friend_relationships')
-          .update({
-            status: 'pending',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existingRelationship.id)
-          .select('id')
-          .single();
-        
-        if (updateError || !updatedData) {
-          console.error('更新好友申请状态失败:', updateError);
-          return false;
-        }
-        
-        requestId = updatedData.id;
-      } else {
-        // 如果不存在好友关系，创建一个新的
-        const { data: newData, error: insertError } = await supabase
-          .from('friend_relationships')
-          .insert({
+        .upsert(
+          {
             user_id: currentUserId,
             friend_id: friendId,
             status: 'pending',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
-          })
-          .select('id')
-          .single();
-        
-        if (insertError || !newData) {
-          console.error('保存好友申请失败:', insertError);
-          return false;
-        }
-        
-        requestId = newData.id;
+          },
+          {
+            onConflict: 'user_id, friend_id' // 告诉Supabase冲突时更新
+          }
+        )
+        .select('id')
+        .single();
+      
+      if (error || !data) {
+        console.error('保存好友申请失败:', error);
+        return false;
       }
+      
+      // 获取ID
+      const requestId = data.id;
       
 
       
