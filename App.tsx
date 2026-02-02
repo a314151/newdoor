@@ -4,6 +4,7 @@ import { generateTheme, generateImage, generateStoryOptions, getPlaceholderImage
 import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './services/gameLogic';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import FriendsService from './services/friendsService';
+import NotificationService from './services/notificationService';
 
 // Modular Component Imports
 import GameGrid from './components/GameGrid';
@@ -199,6 +200,9 @@ const App: React.FC = () => {
     data: {}
   });
   
+  // Notification Service
+  const notificationServiceRef = useRef<NotificationService | null>(null);
+  
   // Auth & Sync State
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -303,69 +307,60 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 当currentUserId变化时，重新初始化邮件系统
+  // 初始化通知服务
+  useEffect(() => {
+    // 创建通知服务实例
+    notificationServiceRef.current = new NotificationService({
+      onShowNotification: (data) => {
+        setNotificationData(data);
+        setShowNotificationModal(true);
+      },
+      onAddToast: (message, type) => addToast(message, type),
+      currentUserId
+    });
+
+    return () => {
+      // 清理通知服务
+      if (notificationServiceRef.current) {
+        notificationServiceRef.current.stopNotificationListener();
+      }
+    };
+  }, []);
+
+  // 当currentUserId变化时，重新初始化邮件系统和通知监听
   useEffect(() => {
     // 确保只有在currentUserId或isDataLoaded变化时才运行
     if (isDataLoaded && currentUserId) {
       initEmailSystem();
       // 启动实时通知监听
-      startNotificationListener(currentUserId);
+      if (notificationServiceRef.current) {
+        notificationServiceRef.current.updateCurrentUserId(currentUserId);
+        notificationServiceRef.current.startNotificationListener(currentUserId);
+      }
+    } else if (notificationServiceRef.current) {
+      // 停止通知监听
+      notificationServiceRef.current.stopNotificationListener();
     }
   }, [currentUserId, isDataLoaded]);
   
-  // 启动实时通知监听
-  const startNotificationListener = (userId: string) => {
-    if (!isSupabaseConfigured()) return;
-    
-    try {
-      // 监听notifications表的变化
-      const { data: { subscription } } = supabase
-        .channel('public:notifications')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${userId}`
-        }, (payload) => {
-          console.log('收到新通知:', payload);
-          const notification = payload.new;
-          
-          // 在游戏界面上显示通知
-          addToast(notification.message, 'info');
-          
-          // 如果是好友申请通知，显示接受/拒绝选项
-          if (notification.type === 'friend_request') {
-            // 显示好友申请对话框
-            setNotificationData({
-              title: '好友申请',
-              message: `${notification.data.senderName} 向你发送了好友申请，是否接受？`,
-              type: 'friend_request',
-              data: notification.data
-            });
-            setShowNotificationModal(true);
-          }
-        })
-        .subscribe();
-      
-      console.log('实时通知监听已启动');
-      return () => subscription.unsubscribe();
-    } catch (error) {
-      console.error('启动实时通知监听失败:', error);
-    }
-  };
-  
   // 处理通知中的接受操作
-  const handleNotificationAccept = () => {
-    if (notificationData.type === 'friend_request') {
-      handleAcceptFriendRequest(notificationData.data.senderId, notificationData.data.requestId);
+  const handleNotificationAccept = async () => {
+    if (notificationServiceRef.current && notificationData.type === 'friend_request') {
+      await notificationServiceRef.current.handleNotificationAccept(notificationData.data);
+      addToast('好友申请已接受，对方将收到通知', 'success');
+      // 刷新好友列表
+      if (currentUserId) {
+        fetchFriends();
+      }
     }
     setShowNotificationModal(false);
   };
   
   // 处理通知中的拒绝操作
-  const handleNotificationReject = () => {
-    if (notificationData.type === 'friend_request') {
-      handleRejectFriendRequest(notificationData.data.senderId, notificationData.data.requestId);
+  const handleNotificationReject = async () => {
+    if (notificationServiceRef.current && notificationData.type === 'friend_request') {
+      await notificationServiceRef.current.handleNotificationReject(notificationData.data);
+      addToast('好友申请已拒绝，对方将收到通知', 'success');
     }
     setShowNotificationModal(false);
   };
@@ -754,8 +749,8 @@ const App: React.FC = () => {
         }
       }
       
-      // 使用FriendsService发送好友申请通知
-      const success = await FriendsService.sendFriendRequestNotification(currentUserId, friendId);
+      // 使用NotificationService发送好友申请通知
+      const success = await notificationServiceRef.current?.sendFriendRequestNotification(currentUserId, friendId);
       
       if (success) {
         addToast('好友申请通知已发送，对方将收到游戏内通知', 'success');
