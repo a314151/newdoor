@@ -215,6 +215,34 @@ export interface LeaderboardEntry {
   updatedAt: number;
 }
 
+export enum EmailContentType {
+  TEXT = 'text',
+  ITEM = 'item',
+  LEVEL = 'level',
+  XP = 'xp',
+  STONES = 'stones'
+}
+
+export interface EmailAttachment {
+  type: EmailContentType;
+  itemType?: ItemType;
+  amount?: number;
+  level?: number;
+  xp?: number;
+  stones?: number;
+}
+
+export interface Email {
+  id: string;
+  subject: string;
+  content: string;
+  attachments: EmailAttachment[];
+  isRead: boolean;
+  isClaimed: boolean;
+  timestamp: number;
+  sender?: string;
+}
+
 declare global {
   interface AIStudio {
     hasSelectedApiKey: () => Promise<boolean>;

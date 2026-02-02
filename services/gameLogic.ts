@@ -1,6 +1,64 @@
 
 import { PlayerStats, Enemy, ThemeConfig } from '../types';
 
+interface TitleInfo {
+  title: string;
+  color: string;
+  isCreator?: boolean;
+}
+
+const CREATOR_UID = '50af4084-52b3-4e50-9dc1-4a11c7311c78';
+
+export const getTitleByLevel = (level: number, uid: string): TitleInfo => {
+  // 检查是否是特定UID用户
+  if (uid === CREATOR_UID) {
+    return {
+      title: '造物者',
+      color: '#ffcc00',
+      isCreator: true
+    };
+  }
+
+  // 根据等级分配称号
+  if (level >= 1 && level <= 10) {
+    return {
+      title: '见习',
+      color: '#666666'
+    };
+  } else if (level >= 11 && level <= 20) {
+    return {
+      title: '初出茅庐',
+      color: '#888888'
+    };
+  } else if (level >= 21 && level <= 30) {
+    return {
+      title: '小有成就',
+      color: '#aaaaaa'
+    };
+  } else if (level >= 31 && level <= 40) {
+    return {
+      title: '威震一方',
+      color: '#cccccc'
+    };
+  } else if (level >= 41 && level <= 50) {
+    return {
+      title: '凌绝顶',
+      color: '#eeeeee'
+    };
+  } else if (level >= 51 && level <= 60) {
+    return {
+      title: '众山小',
+      color: '#ffffff'
+    };
+  } else {
+    // 61级以上
+    return {
+      title: '新人',
+      color: '#999999'
+    };
+  }
+};
+
 interface XpResult {
   newStats: PlayerStats;
   levelsGained: number;

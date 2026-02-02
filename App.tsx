@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry } from './types';
+import { GameState, GridCell, Player, ThemeConfig, GameAssets, CellType, Enemy, AIProvider, AIConfig, PlayerStats, Item, ItemType, StoryLog, SavedLevel, StoryCampaign, ToastMessage, Hero, SkillType, UserProfile, LeaderboardEntry, Email, EmailContentType } from './types';
 import { generateTheme, generateImage, generateStoryOptions, getPlaceholderImage, generateLevelNarrative, generateFullStory, generateHero } from './services/aiService';
-import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './services/gameLogic';
+import { calculateXpGain, generateEnemyStats, calculateMaxStats, getTitleByLevel } from './services/gameLogic';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 
 // Modular Component Imports
@@ -25,6 +25,7 @@ import PasswordModal from './components/modals/PasswordModal';
 import ProfileModal from './components/modals/ProfileModal';
 import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
+import EmailScreen from './components/screens/EmailScreen';
 
 // --- Constants ---
 const DATA_VERSION = "1.7.7"; 
@@ -140,6 +141,10 @@ const App: React.FC = () => {
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardEntry[]>([]);
   const [isLeaderboardLoading, setIsLeaderboardLoading] = useState(false);
 
+  // Email System State
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [unreadEmailCount, setUnreadEmailCount] = useState(0);
+
   // UI Toggles
   const [showSettings, setShowSettings] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
@@ -147,6 +152,7 @@ const App: React.FC = () => {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showEmailScreen, setShowEmailScreen] = useState(false);
   
   // Auth & Sync State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -194,6 +200,8 @@ const App: React.FC = () => {
         if (savedActiveHero) setActiveHeroId(savedActiveHero);
         
         setIsDataLoaded(true); 
+        // 初始化邮件系统
+        initEmailSystem();
     };
     loadLocal();
 
@@ -225,6 +233,7 @@ const App: React.FC = () => {
                 setSyncStatus('saved');
                 fetchFromCloud(session.user.id);
                 fetchAgentRank(session.user.created_at);
+                initEmailSystem();
             }
         });
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -254,6 +263,7 @@ const App: React.FC = () => {
   useEffect(() => { localStorage.setItem('inf_use_ai_images', JSON.stringify(useAiImages)); }, [useAiImages]);
   useEffect(() => { localStorage.setItem('inf_heroes', JSON.stringify(heroes)); }, [heroes]);
   useEffect(() => { localStorage.setItem('inf_active_hero', activeHeroId); }, [activeHeroId]);
+  useEffect(() => { localStorage.setItem('inf_emails', JSON.stringify(emails)); }, [emails]);
 
   useEffect(() => {
     if (!userEmail || !isDataLoaded) return;
@@ -301,6 +311,156 @@ const App: React.FC = () => {
       } catch (e) {
           console.error("Failed to fetch agent rank", e);
       }
+  };
+
+  // Email System Functions
+  const initEmailSystem = () => {
+    // 使用包含用户ID的键来存储邮件初始化状态
+    const emailInitKey = `inf_emails_initialized_${currentUserId || 'anonymous'}`;
+    const hasInitializedEmails = localStorage.getItem(emailInitKey);
+    if (!hasInitializedEmails) {
+      // 第一次登录，添加初始邮件
+      const sampleEmails: Email[] = [
+        {
+          id: '1',
+          subject: '欢迎来到无限之门',
+          content: '亲爱的冒险者，欢迎加入无限之门的世界！这里充满了未知的挑战和机遇，希望你能在这里度过一段美好的冒险时光。',
+          attachments: [
+            {
+              type: EmailContentType.STONES,
+              stones: 5
+            },
+            {
+              type: EmailContentType.ITEM,
+              itemType: ItemType.XP_LARGE
+            }
+          ],
+          isRead: false,
+          isClaimed: false,
+          timestamp: Date.now() - 86400000,
+          sender: '系统'
+        }
+      ];
+
+      setEmails(sampleEmails);
+      setUnreadEmailCount(sampleEmails.filter(email => !email.isRead).length);
+      
+      // 标记为已初始化，防止重复添加
+      localStorage.setItem(emailInitKey, 'true');
+    } else {
+      // 不是第一次登录，从本地存储加载邮件
+      const savedEmails = localStorage.getItem('inf_emails');
+      if (savedEmails) {
+        const parsedEmails = JSON.parse(savedEmails);
+        setEmails(parsedEmails);
+        setUnreadEmailCount(parsedEmails.filter((email: Email) => !email.isRead).length);
+      }
+    }
+  };
+
+  const readEmail = (emailId: string) => {
+    setEmails(prev => prev.map(email => 
+      email.id === emailId ? { ...email, isRead: true } : email
+    ));
+    setUnreadEmailCount(prev => prev - 1);
+  };
+
+  const claimEmail = (emailId: string) => {
+    const email = emails.find(e => e.id === emailId);
+    if (!email) return;
+
+    // Process attachments
+    email.attachments.forEach(attachment => {
+      switch (attachment.type) {
+        case EmailContentType.ITEM:
+          if (attachment.itemType) {
+            const itemName = ITEMS_DB[attachment.itemType].name;
+            const itemDesc = BASE_ITEM_DESC[attachment.itemType];
+            const newItem: Item = {
+              id: Date.now().toString(),
+              type: attachment.itemType,
+              name: itemName,
+              description: itemDesc,
+              count: attachment.amount || 1
+            };
+            setInventory(prev => {
+              const existingItem = prev.find(item => item.type === attachment.itemType);
+              if (existingItem) {
+                return prev.map(item => 
+                  item.type === attachment.itemType 
+                    ? { ...item, count: item.count + (attachment.amount || 1) }
+                    : item
+                );
+              } else {
+                return [...prev, newItem];
+              }
+            });
+          }
+          break;
+        case EmailContentType.XP:
+          if (attachment.xp) {
+            handleGainXp(attachment.xp);
+          }
+          break;
+        case EmailContentType.STONES:
+          if (attachment.stones) {
+            setStats(prev => ({ ...prev, summonStones: prev.summonStones + attachment.stones }));
+          }
+          break;
+        case EmailContentType.LEVEL:
+          if (attachment.level) {
+            // Level up the player
+            for (let i = 0; i < attachment.level; i++) {
+              handleGainXp(stats.nextLevelXp);
+            }
+          }
+          break;
+      }
+    });
+
+    // Mark email as claimed
+    setEmails(prev => prev.map(email => 
+      email.id === emailId ? { ...email, isClaimed: true } : email
+    ));
+  };
+
+  const deleteEmail = (emailId: string) => {
+    setEmails(prev => prev.filter(email => email.id !== emailId));
+    // 更新未读邮件数量
+    const count = emails.filter(email => !email.isRead && email.id !== emailId).length;
+    setUnreadEmailCount(count);
+    addToast('邮件已删除', 'info');
+  };
+
+  const sendNotification = (data: {
+    subject: string;
+    content: string;
+    attachments: Array<{
+      type: EmailContentType;
+      itemType?: ItemType;
+      amount?: number;
+      level?: number;
+      xp?: number;
+      stones?: number;
+    }>;
+    sendToAll: boolean;
+    specificUserId?: string;
+  }) => {
+    const newEmail: Email = {
+      id: Date.now().toString(),
+      subject: data.subject,
+      content: data.content,
+      attachments: data.attachments,
+      isRead: false,
+      isClaimed: false,
+      timestamp: Date.now(),
+      sender: '系统'
+    };
+
+    setEmails(prev => [newEmail, ...prev]);
+    setUnreadEmailCount(prev => prev + 1);
+
+    addToast('通知已发送', 'success');
   };
 
   const fetchLeaderboard = async () => {
@@ -634,11 +794,24 @@ const App: React.FC = () => {
             onOpenCreatorMode={() => setShowPasswordModal(true)}
             onResumeStory={handleResumeStory}
             onOpenLeaderboard={fetchLeaderboard}
+            onOpenEmail={() => setShowEmailScreen(true)}
+            unreadEmailCount={unreadEmailCount}
+        />
+      )}
+
+      {/* --- EMAIL SCREEN --- */}
+      {showEmailScreen && (
+        <EmailScreen 
+            emails={emails}
+            onBack={() => setShowEmailScreen(false)}
+            onReadEmail={readEmail}
+            onClaimEmail={claimEmail}
+            onDeleteEmail={deleteEmail}
         />
       )}
 
       {/* --- OTHER SCREENS --- */}
-      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} />}
+      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.HANDBOOK && <HandbookScreen onBack={() => setGameState(GameState.MENU)} />}
