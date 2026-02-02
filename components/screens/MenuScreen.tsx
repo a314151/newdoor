@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { UserProfile, PlayerStats, StoryCampaign } from '../../types';
 
 // 版本号 - 与App.tsx中的DATA_VERSION保持同步
-const VERSION = "2.0.0";
+const VERSION = "2.0.1";
 
 interface MenuScreenProps {
   userProfile: UserProfile;
