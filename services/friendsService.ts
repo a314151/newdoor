@@ -248,25 +248,60 @@ class FriendsService {
   // 获取用户好友列表
   static async getFriends(userId: string): Promise<Friend[]> {
     try {
+      // 查询双向的好友关系
       const { data: friendsData, error } = await supabase
         .from('friend_relationships')
         .select(`
           id, status, created_at, updated_at,
+          user:profiles!friend_relationships_user_id_fkey(id, email, created_at),
           friend:profiles!friend_relationships_friend_id_fkey(id, email, created_at)
         `)
-        .eq('user_id', userId)
-        .eq('status', 'accepted');
+        .or(`and(user_id.eq.${userId},status.eq.accepted),and(friend_id.eq.${userId},status.eq.accepted)`);
       
       if (!error && friendsData) {
-        return friendsData.map(rel => ({
-          id: rel.friend.id,
-          email: rel.friend.email,
-          username: rel.friend.email.split('@')[0],
-          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${rel.friend.id}`,
-          lastActive: new Date(rel.updated_at).getTime(),
-          isOnline: false,
-          unreadCount: 0
-        }));
+        const friendsMap = new Map<string, Friend>();
+        
+        friendsData.forEach(rel => {
+          // 确定好友的ID和信息
+          let friendId: string;
+          let friendEmail: string;
+          let friendCreatedAt: string;
+          
+          if (rel.user_id === userId) {
+            // 正向关系：user_id是当前用户，friend_id是好友
+            if (rel.friend) {
+              friendId = rel.friend.id;
+              friendEmail = rel.friend.email;
+              friendCreatedAt = rel.friend.created_at;
+            } else {
+              return;
+            }
+          } else {
+            // 反向关系：friend_id是当前用户，user_id是好友
+            if (rel.user) {
+              friendId = rel.user.id;
+              friendEmail = rel.user.email;
+              friendCreatedAt = rel.user.created_at;
+            } else {
+              return;
+            }
+          }
+          
+          // 避免重复添加好友
+          if (!friendsMap.has(friendId)) {
+            friendsMap.set(friendId, {
+              id: friendId,
+              email: friendEmail,
+              username: friendEmail.split('@')[0],
+              avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${friendId}`,
+              lastActive: new Date(rel.updated_at).getTime(),
+              isOnline: false,
+              unreadCount: 0
+            });
+          }
+        });
+        
+        return Array.from(friendsMap.values());
       }
       return [];
     } catch (error) {

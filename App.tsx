@@ -5,6 +5,7 @@ import { calculateXpGain, generateEnemyStats, calculateMaxStats } from './servic
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
 import FriendsService from './services/friendsService';
 import NotificationService from './services/notificationService';
+import ChatService from './services/chatService';
 
 // Modular Component Imports
 import GameGrid from './components/GameGrid';
@@ -307,7 +308,7 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 初始化通知服务
+  // 初始化通知服务和聊天订阅
   useEffect(() => {
     // 创建通知服务实例
     notificationServiceRef.current = new NotificationService({
@@ -323,13 +324,36 @@ const App: React.FC = () => {
       currentUserId
     });
 
+    // 订阅实时消息
+    let unsubscribeChat: (() => void) | undefined;
+    if (currentUserId) {
+      unsubscribeChat = ChatService.subscribeToMessages(currentUserId, (newMessage) => {
+        // 如果当前正在与该好友聊天，自动添加消息
+        if (currentChatFriend && newMessage.senderId === currentChatFriend.id) {
+          setChatMessages(prev => [...prev, newMessage]);
+        } else {
+          // 否则，更新好友的未读消息计数
+          setFriends(prev => prev.map(friend => 
+            friend.id === newMessage.senderId 
+              ? { ...friend, unreadCount: friend.unreadCount + 1 }
+              : friend
+          ));
+          addToast(`收到来自 ${newMessage.senderId.split('@')[0]} 的新消息`, 'info');
+        }
+      });
+    }
+
     return () => {
       // 清理通知服务
       if (notificationServiceRef.current) {
         notificationServiceRef.current.stopNotificationListener();
       }
+      // 取消聊天订阅
+      if (unsubscribeChat) {
+        unsubscribeChat();
+      }
     };
-  }, []);
+  }, [currentUserId, currentChatFriend]);
 
   // 当currentUserId变化时，重新初始化邮件系统和通知监听
   useEffect(() => {
@@ -881,23 +905,11 @@ const App: React.FC = () => {
     // 获取聊天记录
     if (currentUserId) {
       try {
-        const { data, error } = await supabase
-          .from('chat_messages')
-          .select('*')
-          .or(`and(sender_id.eq.${currentUserId},receiver_id.eq.${friend.id}),and(sender_id.eq.${friend.id},receiver_id.eq.${currentUserId})`)
-          .order('created_at', { ascending: true });
+        const messages = await ChatService.getChatMessages(currentUserId, friend.id);
+        setChatMessages(messages);
         
-        if (!error && data) {
-          const messages: ChatMessage[] = data.map(msg => ({
-            id: msg.id,
-            senderId: msg.sender_id,
-            receiverId: msg.receiver_id,
-            content: msg.content,
-            timestamp: new Date(msg.created_at).getTime(),
-            isRead: msg.is_read
-          }));
-          setChatMessages(messages);
-        }
+        // 标记所有消息为已读
+        await ChatService.markAllMessagesAsRead(currentUserId, friend.id);
       } catch (error) {
         console.error('获取聊天记录失败:', error);
       }
@@ -908,31 +920,16 @@ const App: React.FC = () => {
     if (!currentUserId || !currentChatFriend) return false;
     
     try {
-      const { error } = await supabase
-        .from('chat_messages')
-        .insert({
-          sender_id: currentUserId,
-          receiver_id: currentChatFriend.id,
-          content: content
-        });
+      const newMessage = await ChatService.sendMessage(currentUserId, currentChatFriend.id, content);
       
-      if (error) {
+      if (newMessage) {
+        // 添加新消息到本地状态
+        setChatMessages(prev => [...prev, newMessage]);
+        return true;
+      } else {
         addToast('发送消息失败', 'error');
         return false;
       }
-      
-      // 添加新消息到本地状态
-      const newMessage: ChatMessage = {
-        id: Date.now().toString(),
-        senderId: currentUserId,
-        receiverId: currentChatFriend.id,
-        content: content,
-        timestamp: Date.now(),
-        isRead: false
-      };
-      setChatMessages(prev => [...prev, newMessage]);
-      
-      return true;
     } catch (error) {
       console.error('发送消息失败:', error);
       addToast('发送消息失败', 'error');
