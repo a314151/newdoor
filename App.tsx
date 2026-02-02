@@ -778,8 +778,23 @@ const App: React.FC = () => {
             }
           };
           
-          // 这里应该发送到对方的邮件系统，现在我们先模拟本地发送
-          // 实际项目中需要通过服务器发送到对方的邮件系统
+          // 模拟本地发送：将邮件保存到对方的 localStorage 中
+          const friendEmailsKey = `inf_emails_${friendId}`;
+          const friendSavedEmails = localStorage.getItem(friendEmailsKey);
+          let friendEmails: Email[] = [];
+          
+          if (friendSavedEmails) {
+            try {
+              friendEmails = JSON.parse(friendSavedEmails);
+            } catch (e) {
+              console.error('Failed to load friend saved emails:', e);
+            }
+          }
+          
+          // 添加新邮件到对方的邮件列表
+          friendEmails.unshift(newEmail);
+          localStorage.setItem(friendEmailsKey, JSON.stringify(friendEmails));
+          
           console.log('向用户', friendUserData.email, '发送好友申请邮件');
           addToast('好友申请已发送，对方将收到邮件通知', 'success');
         }
@@ -1109,6 +1124,40 @@ const App: React.FC = () => {
           .single();
         
         if (senderUserData) {
+          // 向发送方发送邮件通知
+          const newEmail: Email = {
+            id: Date.now().toString(),
+            subject: '好友申请已接受',
+            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已接受了你的好友申请。\n\n现在你们已经成为好友，可以开始聊天了！`,
+            attachments: [
+              {
+                type: EmailContentType.ITEM,
+                itemType: ItemType.XP_SMALL
+              }
+            ],
+            isRead: false,
+            isClaimed: false,
+            timestamp: Date.now(),
+            sender: '系统'
+          };
+          
+          // 模拟本地发送：将邮件保存到发送方的 localStorage 中
+          const senderEmailsKey = `inf_emails_${senderId}`;
+          const senderSavedEmails = localStorage.getItem(senderEmailsKey);
+          let senderEmails: Email[] = [];
+          
+          if (senderSavedEmails) {
+            try {
+              senderEmails = JSON.parse(senderSavedEmails);
+            } catch (e) {
+              console.error('Failed to load sender saved emails:', e);
+            }
+          }
+          
+          // 添加新邮件到发送方的邮件列表
+          senderEmails.unshift(newEmail);
+          localStorage.setItem(senderEmailsKey, JSON.stringify(senderEmails));
+          
           console.log('向用户', senderUserData.email, '发送好友申请接受邮件');
           addToast('好友申请已接受，对方将收到邮件通知', 'success');
         }
@@ -1141,6 +1190,35 @@ const App: React.FC = () => {
           .single();
         
         if (senderUserData) {
+          // 向发送方发送邮件通知
+          const newEmail: Email = {
+            id: Date.now().toString(),
+            subject: '好友申请已拒绝',
+            content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 已拒绝了你的好友申请。\n\n不要灰心，继续寻找其他冒险者一起冒险吧！`,
+            attachments: [],
+            isRead: false,
+            isClaimed: false,
+            timestamp: Date.now(),
+            sender: '系统'
+          };
+          
+          // 模拟本地发送：将邮件保存到发送方的 localStorage 中
+          const senderEmailsKey = `inf_emails_${senderId}`;
+          const senderSavedEmails = localStorage.getItem(senderEmailsKey);
+          let senderEmails: Email[] = [];
+          
+          if (senderSavedEmails) {
+            try {
+              senderEmails = JSON.parse(senderSavedEmails);
+            } catch (e) {
+              console.error('Failed to load sender saved emails:', e);
+            }
+          }
+          
+          // 添加新邮件到发送方的邮件列表
+          senderEmails.unshift(newEmail);
+          localStorage.setItem(senderEmailsKey, JSON.stringify(senderEmails));
+          
           console.log('向用户', senderUserData.email, '发送好友申请拒绝邮件');
           addToast('好友申请已拒绝，对方将收到邮件通知', 'success');
         }
