@@ -1224,10 +1224,11 @@ const App: React.FC = () => {
       addToast("已退出登录", 'info');
   };
 
-  // --- Announcement Functions ---
+  // --- Announcement Functions ---  
   const loadAnnouncements = async () => {
     try {
-      const loadedAnnouncements = await AnnouncementService.getAnnouncements();
+      const userId = currentUserId || 'guest';
+      const loadedAnnouncements = await AnnouncementService.getAnnouncements(userId);
       setAnnouncements(loadedAnnouncements);
     } catch (error) {
       console.error('Failed to load announcements:', error);
@@ -1244,7 +1245,8 @@ const App: React.FC = () => {
 
   const handleMarkAnnouncementAsRead = async (id: string) => {
     try {
-      await AnnouncementService.markAsRead(id);
+      const userId = currentUserId || 'guest';
+      await AnnouncementService.markAsRead(userId, id);
       await loadAnnouncements();
     } catch (error) {
       console.error('Failed to mark announcement as read:', error);
@@ -1253,7 +1255,8 @@ const App: React.FC = () => {
 
   const handleMarkAllAnnouncementsAsRead = async () => {
     try {
-      await AnnouncementService.markAllAsRead();
+      const userId = currentUserId || 'guest';
+      await AnnouncementService.markAllAsRead(userId);
       await loadAnnouncements();
     } catch (error) {
       console.error('Failed to mark all announcements as read:', error);
@@ -1273,7 +1276,8 @@ const App: React.FC = () => {
 
   const handleDeleteAnnouncement = async (id: string) => {
     try {
-      await AnnouncementService.deleteAnnouncement(id);
+      const userId = currentUserId || 'guest';
+      await AnnouncementService.deleteAnnouncement(userId, id);
       await loadAnnouncements();
       addToast('公告删除成功', 'success');
     } catch (error) {

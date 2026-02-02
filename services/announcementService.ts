@@ -5,41 +5,57 @@ class AnnouncementService {
   private static STORAGE_KEY = 'inf_announcements';
 
   // 获取所有公告
-  static async getAnnouncements(): Promise<Announcement[]> {
+  static async getAnnouncements(userId: string): Promise<Announcement[]> {
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase
+        // 获取所有公告
+        const { data: announcements, error: announceError } = await supabase
           .from('announcements')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (error) {
-          console.error('Failed to get announcements from Supabase:', error);
+        if (announceError) {
+          console.error('Failed to get announcements from Supabase:', announceError);
           // 回退到localStorage
-          return this.getLocalAnnouncements();
+          return this.getLocalAnnouncements(userId);
         }
 
-        return data.map(item => ({
+        // 获取用户已读公告ID
+        const { data: readStatuses, error: readError } = await supabase
+          .from('user_announcement_read')
+          .select('announcement_id')
+          .eq('user_id', userId);
+
+        if (readError) {
+          console.error('Failed to get read statuses from Supabase:', readError);
+          // 回退到localStorage
+          return this.getLocalAnnouncements(userId);
+        }
+
+        const readIds = new Set(readStatuses?.map(item => item.announcement_id) || []);
+
+        return announcements.map(item => ({
           id: item.id,
           title: item.title,
           content: item.content,
           createdAt: new Date(item.created_at).getTime(),
-          isRead: item.is_read
+          isRead: readIds.has(item.id)
         }));
       } else {
         // 使用localStorage作为回退
-        return this.getLocalAnnouncements();
+        return this.getLocalAnnouncements(userId);
       }
     } catch (error) {
       console.error('Failed to get announcements:', error);
-      return this.getLocalAnnouncements();
+      return this.getLocalAnnouncements(userId);
     }
   }
 
   // 从localStorage获取公告（回退方案）
-  private static getLocalAnnouncements(): Announcement[] {
+  private static getLocalAnnouncements(userId: string): Announcement[] {
     try {
-      const stored = localStorage.getItem(this.STORAGE_KEY);
+      const key = `${this.STORAGE_KEY}_${userId}`;
+      const stored = localStorage.getItem(key);
       return stored ? JSON.parse(stored) : [];
     } catch (error) {
       console.error('Failed to get local announcements:', error);
@@ -48,9 +64,10 @@ class AnnouncementService {
   }
 
   // 保存公告到localStorage（回退方案）
-  private static saveLocalAnnouncements(announcements: Announcement[]): void {
+  private static saveLocalAnnouncements(userId: string, announcements: Announcement[]): void {
     try {
-      localStorage.setItem(this.STORAGE_KEY, JSON.stringify(announcements));
+      const key = `${this.STORAGE_KEY}_${userId}`;
+      localStorage.setItem(key, JSON.stringify(announcements));
     } catch (error) {
       console.error('Failed to save local announcements:', error);
     }
@@ -99,191 +116,269 @@ class AnnouncementService {
   }
 
   // 添加公告到localStorage（回退方案）
-  private static addLocalAnnouncement(announcement: Announcement): void {
-    const announcements = this.getLocalAnnouncements();
+  private static addLocalAnnouncement(userId: string, announcement: Announcement): void {
+    const announcements = this.getLocalAnnouncements(userId);
     announcements.unshift(announcement);
-    this.saveLocalAnnouncements(announcements);
+    this.saveLocalAnnouncements(userId, announcements);
   }
 
   // 标记公告为已读
-  static async markAsRead(id: string): Promise<void> {
+  static async markAsRead(userId: string, id: string): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
         const { error } = await supabase
-          .from('announcements')
-          .update({ is_read: true })
-          .eq('id', id);
+          .from('user_announcement_read')
+          .insert({
+            user_id: userId,
+            announcement_id: id,
+            read_at: new Date().toISOString()
+          })
+          .eq('user_id', userId)
+          .eq('announcement_id', id);
 
         if (error) {
           console.error('Failed to mark announcement as read in Supabase:', error);
           // 回退到localStorage
-          this.markLocalAsRead(id);
+          this.markLocalAsRead(userId, id);
         }
       } else {
         // 使用localStorage作为回退
-        this.markLocalAsRead(id);
+        this.markLocalAsRead(userId, id);
       }
     } catch (error) {
       console.error('Failed to mark announcement as read:', error);
       // 回退到localStorage
-      this.markLocalAsRead(id);
+      this.markLocalAsRead(userId, id);
     }
   }
 
   // 标记本地公告为已读（回退方案）
-  private static markLocalAsRead(id: string): void {
-    const announcements = this.getLocalAnnouncements();
+  private static markLocalAsRead(userId: string, id: string): void {
+    const announcements = this.getLocalAnnouncements(userId);
     const updated = announcements.map(announcement => 
       announcement.id === id ? { ...announcement, isRead: true } : announcement
     );
-    this.saveLocalAnnouncements(updated);
+    this.saveLocalAnnouncements(userId, updated);
   }
 
   // 标记所有公告为已读
-  static async markAllAsRead(): Promise<void> {
+  static async markAllAsRead(userId: string): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
-        const { error } = await supabase
+        // 首先获取所有未读公告
+        const { data: announcements, error: getError } = await supabase
           .from('announcements')
-          .update({ is_read: true });
+          .select('id');
 
-        if (error) {
-          console.error('Failed to mark all announcements as read in Supabase:', error);
+        if (getError) {
+          console.error('Failed to get announcements for marking all as read:', getError);
           // 回退到localStorage
-          this.markAllLocalAsRead();
+          this.markAllLocalAsRead(userId);
+          return;
+        }
+
+        // 批量插入已读记录
+        const readRecords = announcements.map(announcement => ({
+          user_id: userId,
+          announcement_id: announcement.id,
+          read_at: new Date().toISOString()
+        }));
+
+        if (readRecords.length > 0) {
+          const { error } = await supabase
+            .from('user_announcement_read')
+            .insert(readRecords);
+
+          if (error) {
+            console.error('Failed to mark all announcements as read in Supabase:', error);
+            // 回退到localStorage
+            this.markAllLocalAsRead(userId);
+          }
         }
       } else {
         // 使用localStorage作为回退
-        this.markAllLocalAsRead();
+        this.markAllLocalAsRead(userId);
       }
     } catch (error) {
       console.error('Failed to mark all announcements as read:', error);
       // 回退到localStorage
-      this.markAllLocalAsRead();
+      this.markAllLocalAsRead(userId);
     }
   }
 
   // 标记所有本地公告为已读（回退方案）
-  private static markAllLocalAsRead(): void {
-    const announcements = this.getLocalAnnouncements();
+  private static markAllLocalAsRead(userId: string): void {
+    const announcements = this.getLocalAnnouncements(userId);
     const updated = announcements.map(announcement => ({ ...announcement, isRead: true }));
-    this.saveLocalAnnouncements(updated);
+    this.saveLocalAnnouncements(userId, updated);
   }
 
   // 检查是否有未读公告
-  static async hasUnreadAnnouncements(): Promise<boolean> {
+  static async hasUnreadAnnouncements(userId: string): Promise<boolean> {
     try {
       if (isSupabaseConfigured()) {
-        const { data, error } = await supabase
+        // 获取所有公告ID
+        const { data: allAnnouncements, error: announceError } = await supabase
           .from('announcements')
-          .select('is_read')
-          .eq('is_read', false)
-          .limit(1);
+          .select('id');
 
-        if (error) {
-          console.error('Failed to check unread announcements in Supabase:', error);
+        if (announceError) {
+          console.error('Failed to get announcements in Supabase:', announceError);
           // 回退到localStorage
-          return this.hasLocalUnreadAnnouncements();
+          return this.hasLocalUnreadAnnouncements(userId);
         }
 
-        return data.length > 0;
+        // 获取用户已读公告ID
+        const { data: readStatuses, error: readError } = await supabase
+          .from('user_announcement_read')
+          .select('announcement_id')
+          .eq('user_id', userId);
+
+        if (readError) {
+          console.error('Failed to check unread announcements in Supabase:', readError);
+          // 回退到localStorage
+          return this.hasLocalUnreadAnnouncements(userId);
+        }
+
+        const readIds = new Set(readStatuses?.map(item => item.announcement_id) || []);
+        const unreadCount = allAnnouncements.filter(announcement => !readIds.has(announcement.id)).length;
+
+        return unreadCount > 0;
       } else {
         // 使用localStorage作为回退
-        return this.hasLocalUnreadAnnouncements();
+        return this.hasLocalUnreadAnnouncements(userId);
       }
     } catch (error) {
       console.error('Failed to check unread announcements:', error);
-      return this.hasLocalUnreadAnnouncements();
+      return this.hasLocalUnreadAnnouncements(userId);
     }
   }
 
   // 检查本地是否有未读公告（回退方案）
-  private static hasLocalUnreadAnnouncements(): boolean {
-    const announcements = this.getLocalAnnouncements();
+  private static hasLocalUnreadAnnouncements(userId: string): boolean {
+    const announcements = this.getLocalAnnouncements(userId);
     return announcements.some(announcement => !announcement.isRead);
   }
 
   // 获取未读公告数量
-  static async getUnreadCount(): Promise<number> {
+  static async getUnreadCount(userId: string): Promise<number> {
     try {
       if (isSupabaseConfigured()) {
-        const { count, error } = await supabase
+        // 获取所有公告数量
+        const { count: totalCount, error: totalError } = await supabase
           .from('announcements')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_read', false);
+          .select('*', { count: 'exact', head: true });
 
-        if (error) {
-          console.error('Failed to get unread count from Supabase:', error);
+        if (totalError) {
+          console.error('Failed to get total announcements count from Supabase:', totalError);
           // 回退到localStorage
-          return this.getLocalUnreadCount();
+          return this.getLocalUnreadCount(userId);
         }
 
-        return count || 0;
+        // 获取用户已读公告数量
+        const { count: readCount, error: readError } = await supabase
+          .from('user_announcement_read')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId);
+
+        if (readError) {
+          console.error('Failed to get read count from Supabase:', readError);
+          // 回退到localStorage
+          return this.getLocalUnreadCount(userId);
+        }
+
+        return (totalCount || 0) - (readCount || 0);
       } else {
         // 使用localStorage作为回退
-        return this.getLocalUnreadCount();
+        return this.getLocalUnreadCount(userId);
       }
     } catch (error) {
       console.error('Failed to get unread count:', error);
-      return this.getLocalUnreadCount();
+      return this.getLocalUnreadCount(userId);
     }
   }
 
   // 获取本地未读公告数量（回退方案）
-  private static getLocalUnreadCount(): number {
-    const announcements = this.getLocalAnnouncements();
+  private static getLocalUnreadCount(userId: string): number {
+    const announcements = this.getLocalAnnouncements(userId);
     return announcements.filter(announcement => !announcement.isRead).length;
   }
 
   // 删除公告
-  static async deleteAnnouncement(id: string): Promise<void> {
+  static async deleteAnnouncement(userId: string, id: string): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
-        const { error } = await supabase
+        // 先删除公告
+        const { error: deleteError } = await supabase
           .from('announcements')
           .delete()
           .eq('id', id);
 
-        if (error) {
-          console.error('Failed to delete announcement from Supabase:', error);
+        if (deleteError) {
+          console.error('Failed to delete announcement from Supabase:', deleteError);
+        }
+
+        // 再删除所有用户对该公告的阅读记录
+        const { error: readDeleteError } = await supabase
+          .from('user_announcement_read')
+          .delete()
+          .eq('announcement_id', id);
+
+        if (readDeleteError) {
+          console.error('Failed to delete read statuses from Supabase:', readDeleteError);
+        }
+
+        if (deleteError) {
           // 回退到localStorage
-          this.deleteLocalAnnouncement(id);
+          this.deleteLocalAnnouncement(userId, id);
         }
       } else {
         // 使用localStorage作为回退
-        this.deleteLocalAnnouncement(id);
+        this.deleteLocalAnnouncement(userId, id);
       }
     } catch (error) {
       console.error('Failed to delete announcement:', error);
       // 回退到localStorage
-      this.deleteLocalAnnouncement(id);
+      this.deleteLocalAnnouncement(userId, id);
     }
   }
 
   // 从localStorage删除公告（回退方案）
-  private static deleteLocalAnnouncement(id: string): void {
-    const announcements = this.getLocalAnnouncements();
+  private static deleteLocalAnnouncement(userId: string, id: string): void {
+    const announcements = this.getLocalAnnouncements(userId);
     const updated = announcements.filter(announcement => announcement.id !== id);
-    this.saveLocalAnnouncements(updated);
+    this.saveLocalAnnouncements(userId, updated);
   }
 
   // 清除所有公告
-  static async clearAllAnnouncements(): Promise<void> {
+  static async clearAllAnnouncements(userId: string): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
-        const { error } = await supabase
+        // 删除所有公告
+        const { error: deleteError } = await supabase
           .from('announcements')
           .delete();
 
-        if (error) {
-          console.error('Failed to clear announcements from Supabase:', error);
+        if (deleteError) {
+          console.error('Failed to clear announcements from Supabase:', deleteError);
+        }
+
+        // 删除所有用户的阅读记录
+        const { error: readDeleteError } = await supabase
+          .from('user_announcement_read')
+          .delete();
+
+        if (readDeleteError) {
+          console.error('Failed to clear read statuses from Supabase:', readDeleteError);
         }
       }
       // 同时清除localStorage
-      localStorage.removeItem(this.STORAGE_KEY);
+      const key = `${this.STORAGE_KEY}_${userId}`;
+      localStorage.removeItem(key);
     } catch (error) {
       console.error('Failed to clear announcements:', error);
-      localStorage.removeItem(this.STORAGE_KEY);
+      const key = `${this.STORAGE_KEY}_${userId}`;
+      localStorage.removeItem(key);
     }
   }
 }
