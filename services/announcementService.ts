@@ -23,7 +23,7 @@ class AnnouncementService {
         // 获取用户已读公告ID
         const { data: readStatuses, error: readError } = await supabase
           .from('user_announcement_read')
-          .select('announcement_id')
+          .select('announcement_id, is_read')
           .eq('user_id', userId);
 
         if (readError) {
@@ -32,7 +32,10 @@ class AnnouncementService {
           return this.getLocalAnnouncements(userId);
         }
 
-        const readIds = new Set(readStatuses?.map(item => item.announcement_id) || []);
+        // 创建已读公告ID的集合，只包含is_read为true的记录
+        const readIds = new Set(
+          readStatuses?.filter(item => item.is_read).map(item => item.announcement_id) || []
+        );
 
         return announcements.map(item => ({
           id: item.id,
