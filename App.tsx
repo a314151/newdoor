@@ -434,6 +434,15 @@ const App: React.FC = () => {
     }
   }, [isDataLoaded]);
 
+  // 定期刷新公告列表
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadAnnouncements();
+    }, 30000); // 每30秒刷新一次
+
+    return () => clearInterval(interval);
+  }, []);
+
   const saveConfig = (provider: AIProvider, key: string, baseUrl?: string, model?: string) => {
     setAiConfig({ provider, apiKey: key, baseUrl, model });
     localStorage.setItem('ai_provider', provider);
@@ -1216,9 +1225,13 @@ const App: React.FC = () => {
   };
 
   // --- Announcement Functions ---
-  const loadAnnouncements = () => {
-    const loadedAnnouncements = AnnouncementService.getAnnouncements();
-    setAnnouncements(loadedAnnouncements);
+  const loadAnnouncements = async () => {
+    try {
+      const loadedAnnouncements = await AnnouncementService.getAnnouncements();
+      setAnnouncements(loadedAnnouncements);
+    } catch (error) {
+      console.error('Failed to load announcements:', error);
+    }
   };
 
   const showAnnouncementBar = () => {
@@ -1229,26 +1242,44 @@ const App: React.FC = () => {
     setIsAnnouncementVisible(false);
   };
 
-  const handleMarkAnnouncementAsRead = (id: string) => {
-    AnnouncementService.markAsRead(id);
-    loadAnnouncements();
+  const handleMarkAnnouncementAsRead = async (id: string) => {
+    try {
+      await AnnouncementService.markAsRead(id);
+      await loadAnnouncements();
+    } catch (error) {
+      console.error('Failed to mark announcement as read:', error);
+    }
   };
 
-  const handleMarkAllAnnouncementsAsRead = () => {
-    AnnouncementService.markAllAsRead();
-    loadAnnouncements();
+  const handleMarkAllAnnouncementsAsRead = async () => {
+    try {
+      await AnnouncementService.markAllAsRead();
+      await loadAnnouncements();
+    } catch (error) {
+      console.error('Failed to mark all announcements as read:', error);
+    }
   };
 
-  const handleAddAnnouncement = (title: string, content: string) => {
-    const newAnnouncement = AnnouncementService.addAnnouncement(title, content);
-    setAnnouncements(prev => [newAnnouncement, ...prev]);
-    addToast('公告发布成功', 'success');
+  const handleAddAnnouncement = async (title: string, content: string) => {
+    try {
+      const newAnnouncement = await AnnouncementService.addAnnouncement(title, content);
+      await loadAnnouncements();
+      addToast('公告发布成功', 'success');
+    } catch (error) {
+      console.error('Failed to add announcement:', error);
+      addToast('公告发布失败', 'error');
+    }
   };
 
-  const handleDeleteAnnouncement = (id: string) => {
-    AnnouncementService.deleteAnnouncement(id);
-    setAnnouncements(prev => prev.filter(announcement => announcement.id !== id));
-    addToast('公告删除成功', 'success');
+  const handleDeleteAnnouncement = async (id: string) => {
+    try {
+      await AnnouncementService.deleteAnnouncement(id);
+      await loadAnnouncements();
+      addToast('公告删除成功', 'success');
+    } catch (error) {
+      console.error('Failed to delete announcement:', error);
+      addToast('公告删除失败', 'error');
+    }
   };
 
   const checkApiKey = async () => {
@@ -1540,7 +1571,7 @@ const App: React.FC = () => {
             onOpenEmail={openEmailScreen}
             onOpenAnnouncements={showAnnouncementBar}
             unreadEmailCount={unreadEmailCount}
-            unreadAnnouncementCount={AnnouncementService.getUnreadCount()}
+            unreadAnnouncementCount={announcements.filter(a => !a.isRead).length}
         />
       )}
 
