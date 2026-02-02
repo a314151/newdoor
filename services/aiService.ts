@@ -240,7 +240,7 @@ export const generateHero = async (config: AIConfig, heroName: string): Promise<
     输出JSON结构要求：
     1. name: 角色名。
     2. title: 一个响亮的称号 (如 "齐天大圣")。
-    3. description: 50字以内的背景介绍。
+    3. description: 200字左右的详细背景介绍，包含角色的起源、经历和个性特点。
     4. visualStyle: 用于生成像素头像的英文提示词 (e.g. "pixel art face of Sun Wukong, golden armor").
     5. skills: 包含2个技能的数组。每个技能包含 name, description, type (ATTACK/HEAL/BUFF/ULTIMATE), mpCost (数值), power (数值1-10)。
     `;
