@@ -29,6 +29,7 @@ import PasswordModal from './components/modals/PasswordModal';
 import ProfileModal from './components/modals/ProfileModal';
 import BackButton from './components/ui/BackButton';
 import AuthModal from './components/modals/AuthModal';
+import NotificationModal from './components/ui/NotificationModal';
 
 // --- Constants ---
 const DATA_VERSION = "2.0.4"; 
@@ -190,6 +191,13 @@ const App: React.FC = () => {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showNotificationModal, setShowNotificationModal] = useState(false);
+  const [notificationData, setNotificationData] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'info' | 'success' | 'error' | 'friend_request',
+    data: {}
+  });
   
   // Auth & Sync State
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -325,8 +333,17 @@ const App: React.FC = () => {
           // 在游戏界面上显示通知
           addToast(notification.message, 'info');
           
-          // 刷新邮件列表，确保新的好友申请邮件显示出来
-          initEmailSystem();
+          // 如果是好友申请通知，显示接受/拒绝选项
+          if (notification.type === 'friend_request') {
+            // 显示好友申请对话框
+            setNotificationData({
+              title: '好友申请',
+              message: `${notification.data.senderName} 向你发送了好友申请，是否接受？`,
+              type: 'friend_request',
+              data: notification.data
+            });
+            setShowNotificationModal(true);
+          }
         })
         .subscribe();
       
@@ -335,6 +352,22 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('启动实时通知监听失败:', error);
     }
+  };
+  
+  // 处理通知中的接受操作
+  const handleNotificationAccept = () => {
+    if (notificationData.type === 'friend_request') {
+      handleAcceptFriendRequest(notificationData.data.senderId, notificationData.data.requestId);
+    }
+    setShowNotificationModal(false);
+  };
+  
+  // 处理通知中的拒绝操作
+  const handleNotificationReject = () => {
+    if (notificationData.type === 'friend_request') {
+      handleRejectFriendRequest(notificationData.data.senderId, notificationData.data.requestId);
+    }
+    setShowNotificationModal(false);
   };
 
   useEffect(() => { localStorage.setItem('inf_stats', JSON.stringify(stats)); }, [stats]);
@@ -688,49 +721,13 @@ const App: React.FC = () => {
     if (!currentUserId) return;
     
     try {
-      // 获取好友列表
-      const { data: friendsData, error } = await supabase
-        .from('friend_relationships')
-        .select(`
-          id, status, created_at, updated_at,
-          friend:profiles!friend_relationships_friend_id_fkey(id, email, created_at)
-        `)
-        .eq('user_id', currentUserId)
-        .eq('status', 'accepted');
+      // 使用FriendsService获取好友列表
+      const friendsList = await FriendsService.getFriends(currentUserId);
+      setFriends(friendsList);
       
-      if (!error && friendsData) {
-        const friendsList: Friend[] = friendsData.map(rel => ({
-          id: rel.friend.id,
-          email: rel.friend.email,
-          username: rel.friend.email.split('@')[0],
-          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${rel.friend.id}`,
-          lastActive: new Date(rel.updated_at).getTime(),
-          isOnline: false,
-          unreadCount: 0
-        }));
-        setFriends(friendsList);
-      }
-      
-      // 获取待处理的好友请求
-      const { data: requestsData, error: requestsError } = await supabase
-        .from('friend_relationships')
-        .select(`
-          id, created_at,
-          user:profiles!friend_relationships_user_id_fkey(id, email, created_at)
-        `)
-        .eq('friend_id', currentUserId)
-        .eq('status', 'pending');
-      
-      if (!requestsError && requestsData) {
-        const requestsList: FriendRequest[] = requestsData.map(rel => ({
-          id: rel.id,
-          userId: rel.user.id,
-          username: rel.user.email.split('@')[0],
-          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${rel.user.id}`,
-          createdAt: new Date(rel.created_at).getTime()
-        }));
-        setPendingRequests(requestsList);
-      }
+      // 使用FriendsService获取待处理的好友请求
+      const requestsList = await FriendsService.getFriendRequests(currentUserId);
+      setPendingRequests(requestsList);
     } catch (error) {
       console.error('获取好友数据失败:', error);
     }
@@ -761,7 +758,7 @@ const App: React.FC = () => {
       const success = await FriendsService.sendFriendRequestNotification(currentUserId, friendId);
       
       if (success) {
-        addToast('好友申请通知已发送，对方将收到邮件', 'success');
+        addToast('好友申请通知已发送，对方将收到游戏内通知', 'success');
         return true;
       } else {
         addToast('发送好友申请失败', 'error');
@@ -1139,15 +1136,33 @@ const App: React.FC = () => {
     }
   };
   
-  const handleRejectFriendRequest = async (senderId: string, emailId: string) => {
+  // 接受好友申请
+  const handleAcceptFriendRequest = async (senderId: string, requestId: string) => {
     try {
-      // 使用FriendsService拒绝好友申请
-      const success = await FriendsService.rejectFriendRequest(currentUserId!, senderId);
+      // 使用FriendsService接受好友申请
+      const success = await FriendsService.acceptFriendRequest(currentUserId!, senderId, requestId);
       
       if (success) {
-        addToast('好友申请已拒绝，对方将收到邮件通知', 'success');
-        // 删除邮件
-        deleteEmail(emailId);
+        addToast('好友申请已接受，对方将收到通知', 'success');
+        // 刷新好友列表
+        fetchFriends();
+      } else {
+        addToast('接受好友申请失败', 'error');
+      }
+    } catch (error) {
+      console.error('接受好友申请失败:', error);
+      addToast('接受好友申请失败', 'error');
+    }
+  };
+  
+  // 拒绝好友申请
+  const handleRejectFriendRequest = async (senderId: string, requestId: string) => {
+    try {
+      // 使用FriendsService拒绝好友申请
+      const success = await FriendsService.rejectFriendRequest(currentUserId!, senderId, requestId);
+      
+      if (success) {
+        addToast('好友申请已拒绝，对方将收到通知', 'success');
       } else {
         addToast('拒绝好友申请失败', 'error');
       }
@@ -1606,6 +1621,18 @@ const App: React.FC = () => {
         {showProfileModal && <ProfileModal userProfile={userProfile} aiConfig={aiConfig} checkApiKey={checkApiKey} onSave={(newProfile) => setUserProfile(newProfile)} onClose={() => setShowProfileModal(false)} />}
         {showQuitModal && (<div className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 animate-fade-in"><div className="bg-slate-900 border-2 border-red-500 rounded p-6 max-w-sm w-full text-center shadow-2xl"><h3 className="text-xl font-bold text-red-400 mb-4 pixel-font">⚠ 撤退警告</h3><p className="text-slate-300 mb-6 text-sm leading-relaxed">快速冒险模式的数据处于"量子叠加态"。<br/><br/>现在撤退将导致<span className="text-red-400 font-bold">观测坍缩</span>，当前关卡的所有进度（包括经验和战利品）将永久丢失。</p><div className="flex gap-4 justify-center"><button onClick={() => setShowQuitModal(false)} className="px-6 py-2 bg-slate-700 hover:bg-slate-600 rounded text-white transition-colors">取消</button><button onClick={confirmQuit} className="px-6 py-2 bg-red-800 hover:bg-red-700 rounded text-white font-bold transition-colors">确定放弃</button></div></div></div>)}
         {showAuthModal && <AuthModal onLoginSuccess={(email) => { setUserEmail(email); setShowAuthModal(false); addToast("登录成功！云同步已连接。", 'loot'); }} onClose={() => setShowAuthModal(false)} />}
+        {showNotificationModal && (
+          <NotificationModal
+            isOpen={showNotificationModal}
+            title={notificationData.title}
+            message={notificationData.message}
+            type={notificationData.type}
+            data={notificationData.data}
+            onClose={() => setShowNotificationModal(false)}
+            onAccept={handleNotificationAccept}
+            onReject={handleNotificationReject}
+          />
+        )}
       </div>
     </div>
   );

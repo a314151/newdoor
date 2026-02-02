@@ -1,5 +1,5 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import { Friend, FriendRequest, Email, EmailContentType, ItemType } from '../types';
+import { Friend, FriendRequest } from '../types';
 
 // 好友系统服务
 class FriendsService {
@@ -30,30 +30,24 @@ class FriendsService {
         return false;
       }
       
-      // 创建好友申请邮件
-      const friendRequestEmail: Email = {
-        id: Date.now().toString(),
-        subject: '好友申请通知',
-        content: `亲爱的冒险者，\n\n${currentUserData.email.split('@')[0]} 向你发送了好友申请。\n\n请点击下方按钮处理申请。`,
-        attachments: [
-          {
-            type: EmailContentType.ITEM,
-            itemType: ItemType.XP_SMALL
-          }
-        ],
-        isRead: false,
-        isClaimed: false,
-        timestamp: Date.now(),
-        sender: '系统',
-        friendRequest: {
-          requestId: Date.now().toString(),
-          senderId: currentUserId,
-          senderName: currentUserData.email.split('@')[0]
-        }
-      };
+      // 生成申请ID
+      const requestId = Date.now().toString();
       
-      // 保存邮件到对方的localStorage
-      this.saveEmailToLocalStorage(friendId, friendRequestEmail);
+      // 保存好友申请到数据库
+      const { error } = await supabase
+        .from('friend_requests')
+        .insert({
+          id: requestId,
+          sender_id: currentUserId,
+          receiver_id: friendId,
+          status: 'pending',
+          created_at: new Date().toISOString()
+        });
+      
+      if (error) {
+        console.error('保存好友申请失败:', error);
+        return false;
+      }
       
       // 使用Supabase实时功能发送通知
       await this.sendRealTimeNotification(friendId, {
@@ -61,6 +55,7 @@ class FriendsService {
         message: `${currentUserData.email.split('@')[0]} 向你发送了好友申请`,
         senderId: currentUserId,
         senderName: currentUserData.email.split('@')[0],
+        requestId: requestId,
         timestamp: Date.now()
       });
       
@@ -97,7 +92,7 @@ class FriendsService {
   }
   
   // 接受好友申请
-  static async acceptFriendRequest(currentUserId: string, senderId: string, emailId: string): Promise<boolean> {
+  static async acceptFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
     try {
       // 检查是否已经是好友
       const { data: existingFriends } = await supabase
@@ -111,6 +106,17 @@ class FriendsService {
           console.log('已经是好友了');
           return false;
         }
+      }
+      
+      // 更新好友申请状态为已接受
+      const { error: updateError } = await supabase
+        .from('friend_requests')
+        .update({ status: 'accepted' })
+        .eq('id', requestId);
+      
+      if (updateError) {
+        console.error('更新好友申请状态失败:', updateError);
+        return false;
       }
       
       // 创建好友关系
@@ -139,8 +145,19 @@ class FriendsService {
   }
   
   // 拒绝好友申请
-  static async rejectFriendRequest(currentUserId: string, senderId: string): Promise<boolean> {
+  static async rejectFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
     try {
+      // 更新好友申请状态为已拒绝
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'rejected' })
+        .eq('id', requestId);
+      
+      if (error) {
+        console.error('更新好友申请状态失败:', error);
+        return false;
+      }
+      
       // 向发送方发送拒绝通知
       await this.sendFriendRequestRejectedNotification(currentUserId, senderId);
       
@@ -168,24 +185,16 @@ class FriendsService {
           .single();
         
         if (senderUserData) {
-          const acceptanceEmail: Email = {
-            id: Date.now().toString(),
-            subject: '好友申请已接受',
-            content: `亲爱的冒险者，\n\n${receiverUserData.email.split('@')[0]} 已接受了你的好友申请。\n\n现在你们已经成为好友，可以开始聊天了！`,
-            attachments: [
-              {
-                type: EmailContentType.ITEM,
-                itemType: ItemType.XP_SMALL
-              }
-            ],
-            isRead: false,
-            isClaimed: false,
-            timestamp: Date.now(),
-            sender: '系统'
-          };
+          // 发送实时通知
+          await this.sendRealTimeNotification(senderId, {
+            type: 'friend_request_accepted',
+            message: `${receiverUserData.email.split('@')[0]} 已接受了你的好友申请`,
+            receiverId: receiverId,
+            receiverName: receiverUserData.email.split('@')[0],
+            timestamp: Date.now()
+          });
           
-          this.saveEmailToLocalStorage(senderId, acceptanceEmail);
-          console.log(`向用户 ${senderUserData.email} 发送好友申请接受邮件`);
+          console.log(`向用户 ${senderUserData.email} 发送好友申请接受通知`);
         }
       }
     } catch (error) {
@@ -210,48 +219,20 @@ class FriendsService {
           .single();
         
         if (senderUserData) {
-          const rejectionEmail: Email = {
-            id: Date.now().toString(),
-            subject: '好友申请已拒绝',
-            content: `亲爱的冒险者，\n\n${receiverUserData.email.split('@')[0]} 已拒绝了你的好友申请。\n\n不要灰心，继续寻找其他冒险者一起冒险吧！`,
-            attachments: [],
-            isRead: false,
-            isClaimed: false,
-            timestamp: Date.now(),
-            sender: '系统'
-          };
+          // 发送实时通知
+          await this.sendRealTimeNotification(senderId, {
+            type: 'friend_request_rejected',
+            message: `${receiverUserData.email.split('@')[0]} 已拒绝了你的好友申请`,
+            receiverId: receiverId,
+            receiverName: receiverUserData.email.split('@')[0],
+            timestamp: Date.now()
+          });
           
-          this.saveEmailToLocalStorage(senderId, rejectionEmail);
-          console.log(`向用户 ${senderUserData.email} 发送好友申请拒绝邮件`);
+          console.log(`向用户 ${senderUserData.email} 发送好友申请拒绝通知`);
         }
       }
     } catch (error) {
       console.error('发送好友申请拒绝通知失败:', error);
-    }
-  }
-  
-  // 保存邮件到localStorage
-  private static saveEmailToLocalStorage(userId: string, email: Email): void {
-    try {
-      const emailsKey = `inf_emails_${userId}`;
-      const savedEmails = localStorage.getItem(emailsKey);
-      let emails: Email[] = [];
-      
-      if (savedEmails) {
-        try {
-          emails = JSON.parse(savedEmails);
-        } catch (e) {
-          console.error('解析保存的邮件失败:', e);
-          emails = [];
-        }
-      }
-      
-      // 添加新邮件到列表开头
-      emails.unshift(email);
-      localStorage.setItem(emailsKey, JSON.stringify(emails));
-      console.log(`邮件已保存到用户 ${userId} 的localStorage`);
-    } catch (error) {
-      console.error('保存邮件到localStorage失败:', error);
     }
   }
   
@@ -281,6 +262,34 @@ class FriendsService {
       return [];
     } catch (error) {
       console.error('获取好友列表失败:', error);
+      return [];
+    }
+  }
+  
+  // 获取用户的好友申请
+  static async getFriendRequests(userId: string): Promise<FriendRequest[]> {
+    try {
+      const { data: requestsData, error } = await supabase
+        .from('friend_requests')
+        .select(`
+          id, status, created_at,
+          sender:profiles!friend_requests_sender_id_fkey(id, email, created_at)
+        `)
+        .eq('receiver_id', userId)
+        .eq('status', 'pending');
+      
+      if (!error && requestsData) {
+        return requestsData.map(req => ({
+          id: req.id,
+          userId: req.sender.id,
+          username: req.sender.email.split('@')[0],
+          avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=${req.sender.id}`,
+          timestamp: new Date(req.created_at).getTime()
+        }));
+      }
+      return [];
+    } catch (error) {
+      console.error('获取好友申请失败:', error);
       return [];
     }
   }
