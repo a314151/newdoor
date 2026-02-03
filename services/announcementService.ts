@@ -34,7 +34,7 @@ class AnnouncementService {
 
         // 创建已读公告ID的集合，只包含is_read为true的记录
         const readIds = new Set(
-          readStatuses?.filter(item => item.is_read).map(item => item.announcement_id) || []
+          readStatuses?.filter(item => item.is_read || item.isRead).map(item => item.announcement_id) || []
         );
 
         return announcements.map(item => ({
