@@ -1087,15 +1087,25 @@ const App: React.FC = () => {
 
       if (data.sendToAll) {
         // 发送给所有用户
-        // 1. 获取所有用户的ID
-        const { data: users, error: usersError } = await supabase
+        // 1. 尝试从profiles表获取所有用户的ID
+        let { data: users, error: usersError } = await supabase
           .from('profiles')
           .select('id');
 
-        if (usersError) {
-          console.error('获取用户列表失败:', usersError);
-          addToast('获取用户列表失败', 'error');
-          return;
+        // 如果profiles表不存在或没有数据，尝试从users表获取
+        if (usersError || !users || users.length === 0) {
+          console.log('从profiles表获取用户失败，尝试从users表获取:', usersError);
+          const { data: usersFromUsers, error: usersFromUsersError } = await supabase
+            .from('users')
+            .select('id');
+
+          if (usersFromUsersError) {
+            console.error('获取用户列表失败:', usersFromUsersError);
+            addToast('获取用户列表失败', 'error');
+            return;
+          }
+
+          users = usersFromUsers;
         }
 
         if (users && users.length > 0) {
