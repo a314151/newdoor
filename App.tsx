@@ -1338,6 +1338,17 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteWorldTreeProposal = async (id: string) => {
+    try {
+      await WorldTreeService.deleteProposal(id);
+      await loadWorldTreeProposals();
+      addToast('提议已删除，世界树已回退到之前的状态', 'success');
+    } catch (error) {
+      console.error('Failed to delete world tree proposal:', error);
+      addToast('删除提议失败', 'error');
+    }
+  };
+
   const checkApiKey = async () => {
     let currentApiKey = aiConfig.apiKey;
     const envApiKey = getSafeEnv('API_KEY');
@@ -1633,7 +1644,7 @@ const App: React.FC = () => {
       )}
 
       {/* --- OTHER SCREENS --- */}
-      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} onAddAnnouncement={handleAddAnnouncement} announcements={announcements} onDeleteAnnouncement={handleDeleteAnnouncement} onOpenWorldTree={() => setGameState(GameState.WORLD_TREE)} worldTreeProposals={worldTreeProposals} onMarkWorldTreeProposalAsCompleted={handleMarkWorldTreeProposalAsCompleted} />}
+      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} onAddAnnouncement={handleAddAnnouncement} announcements={announcements} onDeleteAnnouncement={handleDeleteAnnouncement} onOpenWorldTree={() => setGameState(GameState.WORLD_TREE)} worldTreeProposals={worldTreeProposals} onMarkWorldTreeProposalAsCompleted={handleMarkWorldTreeProposalAsCompleted} onDeleteWorldTreeProposal={handleDeleteWorldTreeProposal} />}
       {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} onAcceptFriendRequest={handleAcceptFriendRequest} onRejectFriendRequest={handleRejectFriendRequest} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onDeleteHero={(id) => { setHeroes(prev => prev.filter(h => h.id !== id)); addToast('英雄已删除', 'info'); }} onBack={() => setGameState(GameState.MENU)} />}

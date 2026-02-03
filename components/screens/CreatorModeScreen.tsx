@@ -28,9 +28,10 @@ interface CreatorModeScreenProps {
   onOpenWorldTree?: () => void;
   worldTreeProposals?: any[];
   onMarkWorldTreeProposalAsCompleted?: (id: string) => void;
+  onDeleteWorldTreeProposal?: (id: string) => void;
 }
 
-const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification, onAddAnnouncement, announcements = [], onDeleteAnnouncement, onOpenWorldTree, worldTreeProposals = [], onMarkWorldTreeProposalAsCompleted }) => {
+const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification, onAddAnnouncement, announcements = [], onDeleteAnnouncement, onOpenWorldTree, worldTreeProposals = [], onMarkWorldTreeProposalAsCompleted, onDeleteWorldTreeProposal }) => {
   const maxStats = calculateMaxStats(stats.level);
   
   // 发送通知的状态
@@ -448,19 +449,28 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
                                     )}
                                 </div>
                             </div>
-                            {!proposal.isCompleted && (
+                            <div className="flex flex-col gap-2 ml-4">
+                                {!proposal.isCompleted && (
+                                    <button 
+                                        onClick={() => onMarkWorldTreeProposalAsCompleted?.(proposal.id)}
+                                        className="px-3 py-1 bg-blue-900/50 hover:bg-blue-800 border border-blue-600 rounded text-blue-100 text-xs font-bold transition-colors"
+                                    >
+                                        标记为已完成
+                                    </button>
+                                )}
+                                {proposal.isCompleted && (
+                                    <span className="px-3 py-1 bg-yellow-900/20 border border-yellow-700 rounded text-yellow-300 text-xs font-bold">
+                                        已完成
+                                    </span>
+                                )}
                                 <button 
-                                    onClick={() => onMarkWorldTreeProposalAsCompleted?.(proposal.id)}
-                                    className="ml-4 px-3 py-1 bg-blue-900/50 hover:bg-blue-800 border border-blue-600 rounded text-blue-100 text-xs font-bold transition-colors"
+                                    onClick={() => onDeleteWorldTreeProposal?.(proposal.id)}
+                                    className="px-3 py-1 bg-red-900/50 hover:bg-red-800 border border-red-600 rounded text-red-100 text-xs font-bold transition-colors"
+                                    title="删除此提议，世界树会回退到之前的状态"
                                 >
-                                    标记为已完成
+                                    删除
                                 </button>
-                            )}
-                            {proposal.isCompleted && (
-                                <span className="ml-4 px-3 py-1 bg-yellow-900/20 border border-yellow-700 rounded text-yellow-300 text-xs font-bold">
-                                    已完成
-                                </span>
-                            )}
+                            </div>
                         </div>
                     ))}
                 </div>
