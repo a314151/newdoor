@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '../ui/Header';
-import { PlayerStats, EmailContentType, ItemType, Announcement } from '../../types';
+import { PlayerStats, EmailContentType, ItemType, Announcement, Hero } from '../../types';
+import HeroService from '../../services/heroService';
 import { calculateMaxStats } from '../../services/gameLogic';
 
 interface CreatorModeScreenProps {
@@ -53,6 +54,37 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
   const [newAttachmentType, setNewAttachmentType] = useState<EmailContentType>(EmailContentType.TEXT);
   const [newAttachmentAmount, setNewAttachmentAmount] = useState(1);
   const [newAttachmentItemType, setNewAttachmentItemType] = useState<ItemType>(ItemType.XP_SMALL);
+  
+  // 全局英雄管理
+  const [globalHeroes, setGlobalHeroes] = useState<Hero[]>([]);
+  const [isLoadingHeroes, setIsLoadingHeroes] = useState(false);
+
+  // 加载全局英雄
+  useEffect(() => {
+    const loadGlobalHeroes = async () => {
+      setIsLoadingHeroes(true);
+      try {
+        const heroes = await HeroService.getGlobalHeroes();
+        setGlobalHeroes(heroes);
+      } catch (error) {
+        console.error('Failed to load global heroes:', error);
+      } finally {
+        setIsLoadingHeroes(false);
+      }
+    };
+
+    loadGlobalHeroes();
+  }, []);
+
+  // 删除全局英雄
+  const handleDeleteGlobalHero = async (heroId: string) => {
+    try {
+      await HeroService.deleteGlobalHero(heroId);
+      setGlobalHeroes(prev => prev.filter(hero => hero.id !== heroId));
+    } catch (error) {
+      console.error('Failed to delete global hero:', error);
+    }
+  };
   
   const addAttachment = () => {
     const newAttachment: any = {
@@ -411,8 +443,52 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
                 </div>
             )}
         </div>
+
+        {/* 全局英雄管理 */}
+        <div className="mt-8">
+          <h3 className="text-lg font-bold text-white mb-4 border-b border-slate-700 pb-2">全局英雄管理</h3>
+          
+          {isLoadingHeroes ? (
+            <div className="text-center py-8 text-slate-400">加载中...</div>
+          ) : globalHeroes.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">暂无全局英雄</div>
+          ) : (
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+              {globalHeroes.map(hero => (
+                <div key={hero.id} className="p-3 rounded border border-slate-700 bg-slate-800">
+                  <div className="flex justify-between items-start">
+                    <div className="flex gap-3">
+                      <img src={hero.imageUrl} className="w-12 h-12 rounded bg-black object-cover border border-slate-600" alt={hero.name} />
+                      <div>
+                        <div className="font-bold text-white">{hero.name}</div>
+                        <div className="text-xs text-slate-400">{hero.title}</div>
+                        <div className="text-xs text-slate-500 mt-1">创建者: {hero.creator_user_id || '未知'}</div>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleDeleteGlobalHero(hero.id)}
+                      className="px-3 py-1 bg-red-700 text-xs rounded hover:bg-red-600 transition-colors"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <div className="mt-2 text-xs text-slate-400 line-clamp-2">
+                    {hero.description}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {hero.skills.map((skill, index) => (
+                      <span key={index} className="px-2 py-0.5 bg-slate-700 rounded text-xs text-slate-300">
+                        {skill.name}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

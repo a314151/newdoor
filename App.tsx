@@ -7,6 +7,7 @@ import FriendsService from './services/friendsService';
 import NotificationService from './services/notificationService';
 import ChatService from './services/chatService';
 import AnnouncementService from './services/announcementService';
+import HeroService from './services/heroService';
 import AnnouncementBar from './components/ui/AnnouncementBar';
 
 // Modular Component Imports
@@ -1367,6 +1368,10 @@ const App: React.FC = () => {
           const newHero = await generateHero(config, summonInput);
           if (useAiImages) { const imgUrl = await generateImage(config, `${newHero.visualStyle}, pixel art portrait`, true); newHero.imageUrl = imgUrl; }
           setHeroes(prev => [...prev, newHero]); setLastSummonedHero(newHero); addToast(`召唤成功: ${newHero.name}`, 'loot');
+          
+          // 保存英雄到全局英雄表
+          const creatorUserId = currentUserId || 'guest';
+          await HeroService.saveHeroToGlobal(newHero, creatorUserId);
       } catch (e) { addToast("召唤失败，请重试", 'error'); setStats(s => ({ ...s, summonStones: s.summonStones + 1 })); } finally { setIsSummoning(false); setSummonInput(""); }
   };
 
