@@ -364,7 +364,7 @@ const App: React.FC = () => {
     };
   }, [currentUserId, currentChatFriend]);
 
-  // 当currentUserId变化时，重新初始化邮件系统和通知监听
+  // 当currentUserId变化时，重新初始化邮件系统和通知监听，并加载公告
   useEffect(() => {
     // 确保只有在currentUserId或isDataLoaded变化时才运行
     if (isDataLoaded && currentUserId) {
@@ -374,9 +374,13 @@ const App: React.FC = () => {
         notificationServiceRef.current.updateCurrentUserId(currentUserId);
         notificationServiceRef.current.startNotificationListener(currentUserId);
       }
+      // 重新加载公告，确保获取当前用户的公告状态
+      loadAnnouncements();
     } else if (notificationServiceRef.current) {
       // 停止通知监听
       notificationServiceRef.current.stopNotificationListener();
+      // 如果用户登出，也重新加载公告
+      loadAnnouncements();
     }
   }, [currentUserId, isDataLoaded]);
   
