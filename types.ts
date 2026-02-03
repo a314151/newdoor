@@ -17,7 +17,8 @@ export enum GameState {
   LEADERBOARD = 'LEADERBOARD',
   FRIENDS = 'FRIENDS',
   CHAT = 'CHAT',
-  EMAIL = 'EMAIL'
+  EMAIL = 'EMAIL',
+  WORLD_TREE = 'WORLD_TREE'
 }
 
 export enum CellType {
@@ -289,6 +290,16 @@ export interface Announcement {
   content: string;
   createdAt: number;
   isRead: boolean;
+}
+
+export interface WorldTreeProposal {
+  id: string;
+  userId: string;
+  content: string;
+  fruitShape?: string;
+  isCompleted: boolean;
+  createdAt: number;
+  completedAt?: number;
 }
 
 declare global {

@@ -7,7 +7,9 @@ import FriendsService from './services/friendsService';
 import NotificationService from './services/notificationService';
 import ChatService from './services/chatService';
 import AnnouncementService from './services/announcementService';
+import WorldTreeService from './services/worldTreeService';
 import AnnouncementBar from './components/ui/AnnouncementBar';
+import WorldTreeScreen from './components/screens/WorldTreeScreen';
 
 // Modular Component Imports
 import GameGrid from './components/GameGrid';
@@ -149,6 +151,7 @@ const App: React.FC = () => {
   const [heroes, setHeroes] = useState<Hero[]>([DEFAULT_HERO]);
   const [activeHeroId, setActiveHeroId] = useState<string>(DEFAULT_HERO.id);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [worldTreeProposals, setWorldTreeProposals] = useState<any[]>([]);
   
   // --- Session State ---
   const [gameState, setGameState] = useState<GameState>(GameState.MENU);
@@ -264,6 +267,8 @@ const App: React.FC = () => {
         
         // 加载公告
         loadAnnouncements();
+        // 加载世界树提议
+        loadWorldTreeProposals();
         
         setIsDataLoaded(true); 
     };
@@ -1300,6 +1305,39 @@ const App: React.FC = () => {
     }
   };
 
+  // --- World Tree Functions ---  
+  const loadWorldTreeProposals = async () => {
+    try {
+      const proposals = await WorldTreeService.getProposals();
+      setWorldTreeProposals(proposals);
+    } catch (error) {
+      console.error('Failed to load world tree proposals:', error);
+    }
+  };
+
+  const handleSubmitWorldTreeProposal = async (content: string) => {
+    try {
+      const userId = currentUserId || 'guest';
+      const newProposal = await WorldTreeService.addProposal(userId, content);
+      await loadWorldTreeProposals();
+      addToast('提议提交成功，世界树正在成长...', 'success');
+    } catch (error) {
+      console.error('Failed to submit world tree proposal:', error);
+      addToast('提议提交失败', 'error');
+    }
+  };
+
+  const handleMarkWorldTreeProposalAsCompleted = async (id: string) => {
+    try {
+      await WorldTreeService.markAsCompleted(id);
+      await loadWorldTreeProposals();
+      addToast('提议已标记为完成', 'success');
+    } catch (error) {
+      console.error('Failed to mark world tree proposal as completed:', error);
+      addToast('标记完成失败', 'error');
+    }
+  };
+
   const checkApiKey = async () => {
     let currentApiKey = aiConfig.apiKey;
     const envApiKey = getSafeEnv('API_KEY');
@@ -1588,16 +1626,18 @@ const App: React.FC = () => {
             onOpenFriends={openFriendsScreen}
             onOpenEmail={openEmailScreen}
             onOpenAnnouncements={showAnnouncementBar}
+            onOpenWorldTree={() => setGameState(GameState.WORLD_TREE)}
             unreadEmailCount={unreadEmailCount}
             unreadAnnouncementCount={announcements.filter(a => !a.isRead).length}
         />
       )}
 
       {/* --- OTHER SCREENS --- */}
-      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} onAddAnnouncement={handleAddAnnouncement} announcements={announcements} onDeleteAnnouncement={handleDeleteAnnouncement} />}
+      {gameState === GameState.CREATOR_MODE && <CreatorModeScreen stats={stats} setStats={setStats} onBack={() => setGameState(GameState.MENU)} onSendNotification={sendNotification} onAddAnnouncement={handleAddAnnouncement} announcements={announcements} onDeleteAnnouncement={handleDeleteAnnouncement} onOpenWorldTree={() => setGameState(GameState.WORLD_TREE)} worldTreeProposals={worldTreeProposals} onMarkWorldTreeProposalAsCompleted={handleMarkWorldTreeProposalAsCompleted} />}
       {gameState === GameState.EMAIL && <EmailScreen emails={emails} onBack={() => setGameState(GameState.MENU)} onReadEmail={readEmail} onClaimEmail={claimEmail} onDeleteEmail={deleteEmail} onAcceptFriendRequest={handleAcceptFriendRequest} onRejectFriendRequest={handleRejectFriendRequest} />}
       {gameState === GameState.SHOP && <ShopScreen stats={stats} summonInput={summonInput} setSummonInput={setSummonInput} isSummoning={isSummoning} handleSummonHero={handleSummonHero} lastSummonedHero={lastSummonedHero} setLastSummonedHero={setLastSummonedHero} onBack={() => setGameState(GameState.MENU)} />}
       {gameState === GameState.CHARACTERS && <CharacterScreen heroes={heroes} activeHeroId={activeHeroId} setActiveHeroId={setActiveHeroId} onDeleteHero={(id) => { setHeroes(prev => prev.filter(h => h.id !== id)); addToast('英雄已删除', 'info'); }} onBack={() => setGameState(GameState.MENU)} />}
+      {gameState === GameState.WORLD_TREE && <WorldTreeScreen proposals={worldTreeProposals} onSubmitProposal={handleSubmitWorldTreeProposal} onBack={() => setGameState(GameState.MENU)} />}
 
       {/* Announcement Bar */}
       <AnnouncementBar

@@ -28,6 +28,7 @@ interface MenuScreenProps {
   onOpenFriends: () => void;
   onOpenEmail: () => void;
   onOpenAnnouncements: () => void;
+  onOpenWorldTree: () => void;
   unreadEmailCount?: number;
   unreadAnnouncementCount?: number;
 }
@@ -56,6 +57,7 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenFriends,
   onOpenEmail,
   onOpenAnnouncements,
+  onOpenWorldTree,
   unreadEmailCount = 0,
   unreadAnnouncementCount = 0
 }) => {
@@ -182,11 +184,8 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
             </button>
             
             <div className="flex gap-2">
-                <button onClick={onOpenCharacters} className="flex-1 py-3 bg-slate-800 border border-slate-600 rounded hover:bg-slate-700 active:scale-95 transition-colors">
-                    👥 角色
-                </button>
-                <button onClick={onOpenShop} className="flex-1 py-3 bg-yellow-900/20 border border-yellow-700 rounded text-yellow-500 hover:bg-yellow-900/40 active:scale-95 transition-colors">
-                    🔮 召唤
+                <button onClick={onOpenWorldTree} className="flex-1 py-3 bg-green-900/50 border border-green-600 rounded hover:bg-green-800 active:scale-95 transition-colors text-green-100 shadow-[0_0_15px_rgba(34,197,94,0.3)]">
+                    🌳 世界树
                 </button>
                 <button onClick={onOpenHandbook} className="flex-1 py-3 bg-slate-800 border border-slate-600 rounded hover:bg-slate-700 active:scale-95 transition-colors">
                     📘 手册
@@ -234,6 +233,12 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
                         </button>
                         <button onClick={onOpenFriends} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
                             👥 好友
+                        </button>
+                        <button onClick={onOpenCharacters} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
+                            👥 角色
+                        </button>
+                        <button onClick={onOpenShop} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
+                            🔮 召唤
                         </button>
                     </div>
                 )}
