@@ -69,7 +69,6 @@ export interface Hero {
   skills: HeroSkill[];
   isDefault?: boolean;
   visualStyle?: string;
-  creator_user_id?: string;
 }
 
 export interface UserProfile {

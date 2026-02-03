@@ -412,7 +412,7 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
             )}
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
