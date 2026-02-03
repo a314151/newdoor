@@ -6,63 +6,43 @@ class HeroService {
   static async saveHeroToGlobal(hero: Hero, creatorUserId: string): Promise<void> {
     try {
       if (isSupabaseConfigured()) {
-        // 开始一个事务
-        const { data, error: startError } = await supabase.rpc('begin');
-        
-        if (startError) {
-          console.error('Failed to start transaction:', startError);
+        // 插入英雄基本信息
+        const { error: heroError } = await supabase
+          .from('global_heroes')
+          .insert({
+            id: hero.id,
+            name: hero.name,
+            title: hero.title,
+            description: hero.description,
+            image_url: hero.imageUrl,
+            visual_style: hero.visualStyle,
+            is_default: hero.isDefault,
+            creator_user_id: creatorUserId
+          })
+          .onConflict('id')
+          .ignore();
+
+        if (heroError) {
+          console.error('Failed to insert hero:', heroError);
           return;
         }
 
-        try {
-          // 插入英雄基本信息
-          const { error: heroError } = await supabase
-            .from('global_heroes')
+        // 插入英雄技能
+        for (const skill of hero.skills) {
+          const { error: skillError } = await supabase
+            .from('global_hero_skills')
             .insert({
-              id: hero.id,
-              name: hero.name,
-              title: hero.title,
-              description: hero.description,
-              image_url: hero.imageUrl,
-              visual_style: hero.visualStyle,
-              is_default: hero.isDefault,
-              creator_user_id: creatorUserId
-            })
-            .onConflict('id')
-            .ignore();
+              hero_id: hero.id,
+              name: skill.name,
+              description: skill.description,
+              type: skill.type,
+              mp_cost: skill.mpCost,
+              power: skill.power
+            });
 
-          if (heroError) {
-            throw heroError;
+          if (skillError) {
+            console.error('Failed to insert skill:', skillError);
           }
-
-          // 插入英雄技能
-          for (const skill of hero.skills) {
-            const { error: skillError } = await supabase
-              .from('global_hero_skills')
-              .insert({
-                hero_id: hero.id,
-                name: skill.name,
-                description: skill.description,
-                type: skill.type,
-                mp_cost: skill.mpCost,
-                power: skill.power
-              });
-
-            if (skillError) {
-              throw skillError;
-            }
-          }
-
-          // 提交事务
-          const { error: commitError } = await supabase.rpc('commit');
-          
-          if (commitError) {
-            console.error('Failed to commit transaction:', commitError);
-          }
-        } catch (error) {
-          // 回滚事务
-          await supabase.rpc('rollback');
-          console.error('Failed to save hero to global table:', error);
         }
       }
     } catch (error) {
