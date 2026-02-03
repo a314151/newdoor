@@ -479,17 +479,104 @@ const App: React.FC = () => {
   };
 
   const fetchAgentRank = async (userCreatedAt: string) => {
+      console.log("开始获取用户排名，createdAt:", userCreatedAt);
+      
+      // 验证userCreatedAt格式
+      const createdDate = new Date(userCreatedAt);
+      if (isNaN(createdDate.getTime())) {
+          console.error("无效的createdAt格式:", userCreatedAt);
+          return;
+      }
+      
+      console.log("格式化后的createdAt:", createdDate.toISOString());
+      
       try {
-          const { count, error } = await supabase
-            .from('game_saves')
-            .select('*', { count: 'exact', head: true })
-            .lt('created_at', userCreatedAt);
-          if (!error && count !== null) {
-              setAgentRank(count + 1);
+          // 添加超时控制
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => {
+              console.log("获取排名请求超时，取消请求");
+              controller.abort();
+          }, 3000); // 3秒超时
+          
+          // 尝试从game_saves表获取排名
+          try {
+              console.log("尝试从game_saves表获取排名...");
+              const { count, error } = await supabase
+                .from('game_saves')
+                .select('*', { count: 'exact', head: true })
+                .lt('created_at', userCreatedAt)
+                .abortSignal(controller.signal);
+              
+              clearTimeout(timeoutId);
+              
+              if (error) {
+                  console.error("game_saves表查询错误:", error);
+              } else if (count !== null) {
+                  console.log("从game_saves表获取到排名:", count + 1);
+                  setAgentRank(count + 1);
+                  return;
+              }
+          } catch (gameSavesError) {
+              clearTimeout(timeoutId);
+              console.log("game_saves表请求失败:", gameSavesError);
+              console.log("尝试从profiles表获取排名...");
+              
+              // 如果game_saves表失败，尝试从profiles表获取
+              try {
+                  const controller2 = new AbortController();
+                  const timeoutId2 = setTimeout(() => controller2.abort(), 3000);
+                  
+                  const { count, error } = await supabase
+                    .from('profiles')
+                    .select('*', { count: 'exact', head: true })
+                    .lt('created_at', userCreatedAt)
+                    .abortSignal(controller2.signal);
+                  
+                  clearTimeout(timeoutId2);
+                  
+                  if (error) {
+                      console.error("profiles表查询错误:", error);
+                  } else if (count !== null) {
+                      console.log("从profiles表获取到排名:", count + 1);
+                      setAgentRank(count + 1);
+                      return;
+                  }
+              } catch (profilesError) {
+                  console.log("profiles表请求失败:", profilesError);
+                  console.log("尝试从users表获取排名...");
+                  
+                  // 如果profiles表失败，尝试从users表获取
+                  try {
+                      const controller3 = new AbortController();
+                      const timeoutId3 = setTimeout(() => controller3.abort(), 3000);
+                      
+                      const { count, error } = await supabase
+                        .from('users')
+                        .select('*', { count: 'exact', head: true })
+                        .lt('created_at', userCreatedAt)
+                        .abortSignal(controller3.signal);
+                      
+                      clearTimeout(timeoutId3);
+                      
+                      if (error) {
+                          console.error("users表查询错误:", error);
+                      } else if (count !== null) {
+                          console.log("从users表获取到排名:", count + 1);
+                          setAgentRank(count + 1);
+                          return;
+                      }
+                  } catch (usersError) {
+                      console.error("无法从任何表获取排名数据", usersError);
+                  }
+              }
           }
       } catch (e) {
           console.error("Failed to fetch agent rank", e);
       }
+      
+      // 如果所有尝试都失败，设置默认排名
+      console.log("所有排名查询尝试失败，设置默认排名");
+      setAgentRank(1);
   };
 
   const fetchLeaderboard = async () => {
@@ -528,19 +615,37 @@ const App: React.FC = () => {
         
         // 2. 测试Supabase连接
         console.log("测试Supabase连接...");
-        const { data: testData, error: testError } = await supabase
-            .from('game_saves')
-            .select('user_id')
-            .limit(1);
+        let connectionTested = false;
         
-        if (testError) {
-            console.error("Supabase连接测试失败:", testError);
-            addToast(`连接失败: ${testError.message}`, "error");
+        // 尝试从多个表测试连接
+        const testTables = ['game_saves', 'profiles', 'users', 'announcements'];
+        
+        for (const table of testTables) {
+            try {
+                const { data: testData, error: testError } = await supabase
+                    .from(table)
+                    .select('id')
+                    .limit(1);
+                
+                if (!testError) {
+                    console.log(`Supabase连接测试成功（使用${table}表）`);
+                    console.log("测试数据:", testData);
+                    connectionTested = true;
+                    break;
+                }
+            } catch (e) {
+                console.log(`测试${table}表时出错:`, e);
+            }
+        }
+        
+        if (!connectionTested) {
+            console.error("Supabase连接测试失败: 无法连接到任何表");
+            addToast("连接失败: 无法连接到数据库", "error");
             setLeaderboardData([]);
+            setIsLeaderboardLoading(false);
             return;
         }
         console.log("Supabase连接测试成功");
-        console.log("测试数据:", testData);
         
         // 3. 尝试获取所有用户的信息
         console.log("获取所有用户信息...");
@@ -644,93 +749,97 @@ const App: React.FC = () => {
         
         // 首先处理有存档的用户
         saves.forEach(save => {
-            const saveData = save.save_data || {};
-            
-            console.log(`处理用户 ${save.user_id}:`);
-            
-            // 只能使用从profiles表获取的created_at作为注册时间，失败就报错
-            const userData = userMap[save.user_id];
-            if (!userData) {
-                throw new Error(`用户 ${save.user_id} 在profiles表中不存在，无法确定注册时间`);
+            try {
+                const saveData = save.save_data || {};
+                
+                console.log(`处理用户 ${save.user_id}:`);
+                
+                // 获取用户数据，使用多种方式尝试
+                let userData = userMap[save.user_id];
+                let createdAt = Date.now(); // 默认值
+                
+                // 尝试获取创建时间
+                if (userData && userData.created_at) {
+                    const createdTime = new Date(userData.created_at);
+                    if (!isNaN(createdTime.getTime())) {
+                        createdAt = createdTime.getTime();
+                        console.log(`用户 ${save.user_id} 的注册时间:`, createdTime.toISOString());
+                    }
+                } else if (save.created_at) {
+                    // 如果用户数据中没有，尝试使用存档的创建时间
+                    const createdTime = new Date(save.created_at);
+                    if (!isNaN(createdTime.getTime())) {
+                        createdAt = createdTime.getTime();
+                        console.log(`用户 ${save.user_id} 的注册时间（来自存档）:`, createdTime.toISOString());
+                    }
+                }
+                
+                // 改进在线状态检测：基于最近活动时间
+                let isOnline = false;
+                
+                if (save.updated_at) {
+                    const lastActiveTime = new Date(save.updated_at).getTime();
+                    // 最近5分钟内有活动视为在线
+                    isOnline = lastActiveTime > Date.now() - 5 * 60 * 1000;
+                    console.log(`用户 ${save.user_id} 最后活动时间:`, new Date(lastActiveTime).toISOString(), '在线:', isOnline);
+                }
+                
+                const currentLevel = saveData.stats?.level || 1;
+                const correctTitle = getTitleByLevel(currentLevel, save.user_id);
+                
+                const updatedAt = save.updated_at ? new Date(save.updated_at).getTime() : createdAt;
+                
+                const entry = {
+                    userId: save.user_id,
+                    username: saveData.profile?.username || `Agent ${save.user_id.substring(0, 8)}`,
+                    avatarUrl: saveData.profile?.avatarUrl || 'https://placehold.co/100x100?text=?',
+                    title: correctTitle,
+                    level: currentLevel,
+                    updatedAt,
+                    createdAt,
+                    isOnline
+                };
+                
+                console.log(`创建的排行榜条目:`, entry);
+                entries.push(entry);
+            } catch (error) {
+                console.error(`处理用户 ${save.user_id} 时出错:`, error);
+                // 继续处理下一个用户，不中断整个流程
             }
-            
-            if (!userData.created_at) {
-                throw new Error(`用户 ${save.user_id} 在profiles表中没有created_at字段，无法确定注册时间`);
-            }
-            
-            const createdTime = new Date(userData.created_at);
-            if (isNaN(createdTime.getTime())) {
-                throw new Error(`用户 ${save.user_id} 的created_at字段值无效: ${userData.created_at}`);
-            }
-            
-            const createdAt = createdTime.getTime();
-            console.log(`用户 ${save.user_id} 的注册时间（来自profiles表）:`, createdTime.toISOString());
-            
-            // 改进在线状态检测：基于最近活动时间
-            // 如果用户有存档，使用updated_at判断是否在线
-            // 如果用户没有存档，使用created_at判断是否在线（新用户）
-            let isOnline = false;
-            
-            if (save.updated_at) {
-                const lastActiveTime = new Date(save.updated_at).getTime();
-                // 最近5分钟内有活动视为在线
-                isOnline = lastActiveTime > Date.now() - 5 * 60 * 1000;
-                console.log(`用户 ${save.user_id} 最后活动时间:`, new Date(lastActiveTime).toISOString(), '在线:', isOnline);
-            } else if (userData.created_at) {
-                const createdTime = new Date(userData.created_at).getTime();
-                // 如果是新用户（注册时间在5分钟内），视为在线
-                isOnline = createdTime > Date.now() - 5 * 60 * 1000;
-                console.log(`用户 ${save.user_id} 是新用户，注册时间:`, new Date(createdTime).toISOString(), '在线:', isOnline);
-            }
-            
-            const currentLevel = saveData.stats?.level || 1;
-            const correctTitle = getTitleByLevel(currentLevel, save.user_id);
-            
-            const entry = {
-                userId: save.user_id,
-                username: saveData.profile?.username || `Agent ${save.user_id.substring(0, 8)}`,
-                avatarUrl: saveData.profile?.avatarUrl || 'https://placehold.co/100x100?text=?',
-                title: correctTitle,
-                level: currentLevel,
-                updatedAt: new Date(save.updated_at).getTime(),
-                createdAt,
-                isOnline
-            };
-            
-            console.log(`创建的排行榜条目:`, entry);
-            entries.push(entry);
         });
         
         // 然后处理没有存档的用户
         allUsers.forEach(userData => {
-            const userId = userData.id || userData.user_id;
-            if (!saveMap[userId]) {
-                // 只能使用created_at作为注册时间，失败就报错
-                if (!userData.created_at) {
-                    throw new Error(`用户 ${userId} 没有created_at字段，无法确定注册时间`);
+            try {
+                const userId = userData.id || userData.user_id;
+                if (!saveMap[userId]) {
+                    // 尝试获取创建时间
+                    let createdAt = Date.now(); // 默认值
+                    if (userData.created_at) {
+                        const createdTime = new Date(userData.created_at);
+                        if (!isNaN(createdTime.getTime())) {
+                            createdAt = createdTime.getTime();
+                            console.log(`用户 ${userId} 的注册时间（没有存档）:`, createdTime.toISOString());
+                        }
+                    }
+                    
+                    const currentLevel = 1;
+                    const correctTitle = getTitleByLevel(currentLevel, userId);
+                    
+                    entries.push({
+                        userId,
+                        username: userData.email || `Agent ${userId.substring(0, 8)}`,
+                        avatarUrl: 'https://placehold.co/100x100?text=?',
+                        title: correctTitle,
+                        level: currentLevel,
+                        updatedAt: createdAt,
+                        createdAt,
+                        isOnline: false
+                    });
                 }
-                
-                const createdTime = new Date(userData.created_at);
-                if (isNaN(createdTime.getTime())) {
-                    throw new Error(`用户 ${userId} 的created_at字段值无效: ${userData.created_at}`);
-                }
-                
-                const createdAt = createdTime.getTime();
-                console.log(`用户 ${userId} 的注册时间（没有存档）:`, createdTime.toISOString());
-                
-                const currentLevel = 1;
-                const correctTitle = getTitleByLevel(currentLevel, userId);
-                
-                entries.push({
-                    userId,
-                    username: userData.email || `Agent ${userId.substring(0, 8)}`,
-                    avatarUrl: 'https://placehold.co/100x100?text=?',
-                    title: correctTitle,
-                    level: currentLevel,
-                    updatedAt: createdAt,
-                    createdAt,
-                    isOnline: false
-                });
+            } catch (error) {
+                console.error(`处理用户数据时出错:`, error);
+                // 继续处理下一个用户，不中断整个流程
             }
         });
         
