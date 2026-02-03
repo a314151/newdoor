@@ -25,13 +25,9 @@ interface CreatorModeScreenProps {
   onAddAnnouncement?: (title: string, content: string) => void;
   announcements?: Announcement[];
   onDeleteAnnouncement?: (id: string) => void;
-  onOpenWorldTree?: () => void;
-  worldTreeProposals?: any[];
-  onMarkWorldTreeProposalAsCompleted?: (id: string) => void;
-  onDeleteWorldTreeProposal?: (id: string) => void;
 }
 
-const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification, onAddAnnouncement, announcements = [], onDeleteAnnouncement, onOpenWorldTree, worldTreeProposals = [], onMarkWorldTreeProposalAsCompleted, onDeleteWorldTreeProposal }) => {
+const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, onBack, onSendNotification, onAddAnnouncement, announcements = [], onDeleteAnnouncement }) => {
   const maxStats = calculateMaxStats(stats.level);
   
   // 发送通知的状态
@@ -410,67 +406,6 @@ const CreatorModeScreen: React.FC<CreatorModeScreenProps> = ({ stats, setStats, 
                             >
                                 删除
                             </button>
-                        </div>
-                    ))}
-                </div>
-            )}
-        </div>
-
-        {/* 世界树管理功能 */}
-        <div className="bg-slate-800 p-4 rounded border border-slate-700">
-            <h3 className="text-green-400 font-bold mb-4 border-b border-slate-600 pb-2">世界树管理</h3>
-            
-            <div className="mb-4">
-                <button 
-                    onClick={onOpenWorldTree}
-                    disabled={!onOpenWorldTree}
-                    className="w-full py-3 bg-green-900/50 hover:bg-green-800 border border-green-600 rounded text-green-100 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    🌳 打开世界树
-                </button>
-            </div>
-            
-            {worldTreeProposals.length === 0 ? (
-                <div className="text-center text-slate-400 py-4">
-                    暂无世界树提议
-                </div>
-            ) : (
-                <div className="space-y-3">
-                    {worldTreeProposals.map(proposal => (
-                        <div key={proposal.id} className="flex justify-between items-start p-3 bg-slate-900/50 rounded border border-slate-700">
-                            <div className="flex-1 min-w-0">
-                                <div className="font-bold text-white text-sm mb-1 truncate">提议 #{proposal.id.substring(0, 8)}</div>
-                                <div className="text-xs text-slate-400 mb-1 line-clamp-2">{proposal.content}</div>
-                                <div className="text-xs text-slate-500">
-                                    {new Date(proposal.createdAt).toLocaleString()}
-                                    <span className="ml-2 text-green-500">用户: {proposal.userId.substring(0, 8)}</span>
-                                    {proposal.fruitShape && (
-                                        <span className="ml-2 text-yellow-500">果实形状: {proposal.fruitShape}</span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex flex-col gap-2 ml-4">
-                                {!proposal.isCompleted && (
-                                    <button 
-                                        onClick={() => onMarkWorldTreeProposalAsCompleted?.(proposal.id)}
-                                        className="px-3 py-1 bg-blue-900/50 hover:bg-blue-800 border border-blue-600 rounded text-blue-100 text-xs font-bold transition-colors"
-                                    >
-                                        标记为已完成
-                                    </button>
-                                )}
-                                {proposal.isCompleted && (
-                                    <span className="px-3 py-1 bg-yellow-900/20 border border-yellow-700 rounded text-yellow-300 text-xs font-bold">
-                                        已完成
-                                    </span>
-                                )}
-                                <button 
-                                    onClick={() => onDeleteWorldTreeProposal?.(proposal.id)}
-                                    className="px-3 py-1 bg-red-900/50 hover:bg-red-800 border border-red-600 rounded text-red-100 text-xs font-bold transition-colors"
-                                    title="删除此提议，世界树会回退到之前的状态"
-                                >
-                                    删除
-                                </button>
-                            </div>
                         </div>
                     ))}
                 </div>

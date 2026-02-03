@@ -28,7 +28,6 @@ interface MenuScreenProps {
   onOpenFriends: () => void;
   onOpenEmail: () => void;
   onOpenAnnouncements: () => void;
-  onOpenWorldTree: () => void;
   unreadEmailCount?: number;
   unreadAnnouncementCount?: number;
 }
@@ -57,7 +56,6 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
   onOpenFriends,
   onOpenEmail,
   onOpenAnnouncements,
-  onOpenWorldTree,
   unreadEmailCount = 0,
   unreadAnnouncementCount = 0
 }) => {
@@ -149,29 +147,31 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
         </div>
         
         {/* AUTH / SYNC UI */}
-        <div className="w-full mb-4">
-            {userEmail ? (
-                 <div className="flex gap-2 justify-center items-center bg-slate-900/50 p-2 rounded border border-slate-800">
-                     <div className="flex-1 text-left min-w-0">
-                        <span className="text-[10px] text-slate-500 block">云端ID</span>
-                        <span className="text-[10px] text-blue-400 truncate block">{userEmail}</span>
+        {isSupabaseConfigured && (
+            <div className="w-full mb-4">
+                {userEmail ? (
+                     <div className="flex gap-2 justify-center items-center bg-slate-900/50 p-2 rounded border border-slate-800">
+                         <div className="flex-1 text-left min-w-0">
+                            <span className="text-[10px] text-slate-500 block">云端ID</span>
+                            <span className="text-[10px] text-blue-400 truncate block">{userEmail}</span>
+                         </div>
+                         <button 
+                            onClick={onLogout}
+                            className="px-3 py-1 bg-red-900/20 border border-red-800 rounded text-[10px] text-red-400 hover:bg-red-900/50 transition-colors"
+                         >
+                             退出
+                         </button>
                      </div>
-                     <button 
-                        onClick={onLogout}
-                        className="px-3 py-1 bg-red-900/20 border border-red-800 rounded text-[10px] text-red-400 hover:bg-red-900/50 transition-colors"
-                     >
-                         退出
-                     </button>
-                 </div>
-            ) : (
-                <button 
-                    onClick={onOpenAuth}
-                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-sm shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
-                >
-                    <span>☁️</span> 登录 / 注册 (启用云同步 & 排名)
-                </button>
-            )}
-        </div>
+                ) : (
+                    <button 
+                        onClick={onOpenAuth}
+                        className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded font-bold text-sm shadow-lg transition-transform hover:scale-[1.02] flex items-center justify-center gap-2"
+                    >
+                        <span>☁️</span> 登录 / 注册 (启用云同步 & 排名)
+                    </button>
+                )}
+            </div>
+        )}
         
         <div className="grid gap-3 w-full">
             <button onClick={onStartAdventure} className="py-4 bg-blue-900/50 border border-blue-700 hover:bg-blue-800 rounded font-bold transition-transform hover:scale-105 active:scale-95 text-blue-100 shadow-[0_0_15px_rgba(37,99,235,0.3)]">
@@ -182,8 +182,11 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
             </button>
             
             <div className="flex gap-2">
-                <button onClick={onOpenWorldTree} className="flex-1 py-3 bg-green-900/50 border border-green-600 rounded hover:bg-green-800 active:scale-95 transition-colors text-green-100 shadow-[0_0_15px_rgba(34,197,94,0.3)]">
-                    🌳 世界树
+                <button onClick={onOpenCharacters} className="flex-1 py-3 bg-slate-800 border border-slate-600 rounded hover:bg-slate-700 active:scale-95 transition-colors">
+                    👥 角色
+                </button>
+                <button onClick={onOpenShop} className="flex-1 py-3 bg-yellow-900/20 border border-yellow-700 rounded text-yellow-500 hover:bg-yellow-900/40 active:scale-95 transition-colors">
+                    🔮 召唤
                 </button>
                 <button onClick={onOpenHandbook} className="flex-1 py-3 bg-slate-800 border border-slate-600 rounded hover:bg-slate-700 active:scale-95 transition-colors">
                     📘 手册
@@ -231,12 +234,6 @@ const MenuScreen: React.FC<MenuScreenProps> = ({
                         </button>
                         <button onClick={onOpenFriends} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
                             👥 好友
-                        </button>
-                        <button onClick={onOpenCharacters} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
-                            👥 角色
-                        </button>
-                        <button onClick={onOpenShop} className="w-full p-2 text-left hover:bg-slate-700 transition-colors text-sm">
-                            🔮 召唤
                         </button>
                     </div>
                 )}
