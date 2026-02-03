@@ -27,14 +27,21 @@ const getSafeEnv = (key: string): string | undefined => {
 const DEFAULT_URL = 'https://placeholder.supabase.co';
 const DEFAULT_KEY = 'placeholder-key';
 
-const SUPABASE_URL = getSafeEnv('SUPABASE_URL') || DEFAULT_URL;
-const SUPABASE_ANON_KEY = getSafeEnv('SUPABASE_ANON_KEY') || DEFAULT_KEY;
+// 根据环境变量决定连接地址
+const supabaseUrl = getSafeEnv('SUPABASE_URL') || DEFAULT_URL;
+const supabaseKey = getSafeEnv('SUPABASE_ANON_KEY') || DEFAULT_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    // 这里的设置对国内访问很重要，保持 Session 稳定
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
 
 // Helper to check if supabase is configured
 export const isSupabaseConfigured = () => {
-    return !!SUPABASE_URL && !!SUPABASE_ANON_KEY &&
-           SUPABASE_URL !== 'https://placeholder.supabase.co' &&
-           SUPABASE_ANON_KEY !== 'placeholder-key';
+    return !!supabaseUrl && !!supabaseKey &&
+           supabaseUrl !== 'https://placeholder.supabase.co' &&
+           supabaseKey !== 'placeholder-key';
 };
