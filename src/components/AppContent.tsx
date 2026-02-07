@@ -76,19 +76,41 @@ const AppContent: React.FC = () => {
         setIsLoadingHistory(true);
         try {
           const { fetchFromCloud } = await import('../utils/cloudSyncUtils');
-          const savedData = await fetchFromCloud(currentUserId);
-          if (savedData && savedData.success && savedData.data) {
+          // 添加超时处理，防止请求无限挂起
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('加载超时')), 10000); // 10秒超时
+          });
+          
+          const savedData = await Promise.race([
+            fetchFromCloud(currentUserId),
+            timeoutPromise
+          ]) as any;
+          
+          // 检查返回的数据结构
+          if (savedData && typeof savedData === 'object' && savedData.success && savedData.data) {
             const { stories = [], history = [] } = savedData.data;
             setStories(Array.isArray(stories) ? stories : []);
             setHistory(Array.isArray(history) ? history : []);
+          } else {
+            // 如果数据加载失败或返回空，设置空数组
+            console.log('未找到故事和历史记录数据，或数据为空', savedData);
+            setStories([]);
+            setHistory([]);
           }
         } catch (error) {
           console.error('Failed to load stories and history:', error);
+          // 出错时也设置空数组，避免界面卡住
+          setStories([]);
+          setHistory([]);
         } finally {
           setIsLoadingHistory(false);
         }
       };
       loadStoriesAndHistory();
+    } else {
+      // 如果没有用户ID，清空数据
+      setStories([]);
+      setHistory([]);
     }
   }, [currentUserId]);
 
