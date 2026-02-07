@@ -356,8 +356,27 @@ const AppContent: React.FC = () => {
     setAnnouncements(prev => [newAnnouncement, ...prev]);
   };
 
-  const handleDeleteAnnouncement = (id: string) => {
-    setAnnouncements(prev => prev.filter(a => a.id !== id));
+  const handleDeleteAnnouncement = async (id: string) => {
+    // 更新本地状态
+    setAnnouncements(prev => {
+      const updated = prev.filter(a => a.id !== id);
+      
+      // 更新未读计数
+      const unreadCount = updated.filter(a => !a.isRead).length;
+      setUnreadAnnouncementCount(unreadCount);
+      
+      return updated;
+    });
+    
+    // 同步到 Supabase
+    if (currentUserId) {
+      try {
+        const { default: AnnouncementService } = await import('../../services/announcementService');
+        await AnnouncementService.deleteAnnouncement(currentUserId, id);
+      } catch (error) {
+        console.error('Failed to delete announcement from Supabase:', error);
+      }
+    }
   };
 
   // 发送通知
@@ -435,11 +454,48 @@ const AppContent: React.FC = () => {
 
   // Announcement Handlers
   const handleCloseAnnouncements = () => setIsAnnouncementVisible(false);
-  const handleMarkAnnouncementAsRead = (id: string) => {
-    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, isRead: true } : a));
+  const handleMarkAnnouncementAsRead = async (id: string) => {
+    // 更新本地状态
+    setAnnouncements(prev => {
+      const updated = prev.map(a => a.id === id ? { ...a, isRead: true } : a);
+      
+      // 更新未读计数
+      const unreadCount = updated.filter(a => !a.isRead).length;
+      setUnreadAnnouncementCount(unreadCount);
+      
+      return updated;
+    });
+    
+    // 同步到 Supabase
+    if (currentUserId) {
+      try {
+        const { default: AnnouncementService } = await import('../../services/announcementService');
+        await AnnouncementService.markAsRead(currentUserId, id);
+      } catch (error) {
+        console.error('Failed to mark announcement as read in Supabase:', error);
+      }
+    }
   };
-  const handleMarkAllAnnouncementsAsRead = () => {
-    setAnnouncements(prev => prev.map(a => ({ ...a, isRead: true })));
+  const handleMarkAllAnnouncementsAsRead = async () => {
+    // 更新本地状态
+    setAnnouncements(prev => {
+      const updated = prev.map(a => ({ ...a, isRead: true }));
+      
+      // 更新未读计数
+      setUnreadAnnouncementCount(0);
+      
+      return updated;
+    });
+    
+    // 同步到 Supabase
+    if (currentUserId) {
+      try {
+        const { default: AnnouncementService } = await import('../../services/announcementService');
+        await AnnouncementService.markAllAsRead(currentUserId);
+      } catch (error) {
+        console.error('Failed to mark all announcements as read in Supabase:', error);
+      }
+    }
   };
 
   // Chat Handlers
@@ -457,15 +513,80 @@ const AppContent: React.FC = () => {
   };
 
   // Email Handlers
-  const handleReadEmail = (id: string) => {
-    setEmails(prev => prev.map(e => e.id === id ? { ...e, isRead: true } : e));
+  const handleReadEmail = async (id: string) => {
+    // 更新本地状态
+    setEmails(prev => {
+      const updated = prev.map(e => e.id === id ? { ...e, isRead: true } : e);
+      
+      // 更新未读计数
+      const unreadCount = updated.filter(e => !e.isRead).length;
+      setUnreadEmailCount(unreadCount);
+      
+      // 异步保存普通邮件到本地存储
+      if (!id.startsWith('notification_') && currentUserId) {
+        (async () => {
+          try {
+            const { saveEmails } = await import('../utils/storageUtils');
+            saveEmails(currentUserId, updated);
+          } catch (error) {
+            console.error('Failed to save emails to local storage:', error);
+          }
+        })();
+      }
+      
+      return updated;
+    });
+    
+    // 如果是通知，同步到 Supabase
+    if (id.startsWith('notification_') && currentUserId) {
+      try {
+        const notificationId = id.replace('notification_', '');
+        const { default: NotificationService } = await import('../../services/notificationService');
+        await NotificationService.markAsRead(currentUserId, notificationId);
+      } catch (error) {
+        console.error('Failed to mark notification as read in Supabase:', error);
+      }
+    }
   };
   const handleClaimEmail = (id: string) => {
     setEmails(prev => prev.map(e => e.id === id ? { ...e, isClaimed: true } : e));
     // Add rewards logic here
   };
-  const handleDeleteEmail = (id: string) => {
-    setEmails(prev => prev.filter(e => e.id !== id));
+  const handleDeleteEmail = async (id: string) => {
+    // 更新本地状态
+    setEmails(prev => {
+      const updated = prev.filter(e => e.id !== id);
+      
+      // 更新未读计数
+      const unreadCount = updated.filter(e => !e.isRead).length;
+      setUnreadEmailCount(unreadCount);
+      
+      // 异步处理删除逻辑
+      (async () => {
+        // 如果是通知，从 Supabase 删除
+        if (id.startsWith('notification_') && currentUserId) {
+          try {
+            const notificationId = id.replace('notification_', '');
+            const { default: NotificationService } = await import('../../services/notificationService');
+            await NotificationService.deleteNotification(currentUserId, notificationId);
+          } catch (error) {
+            console.error('Failed to delete notification from Supabase:', error);
+          }
+        } else {
+          // 如果是普通邮件，从本地存储删除
+          if (currentUserId) {
+            try {
+              const { saveEmails } = await import('../utils/storageUtils');
+              saveEmails(currentUserId, updated);
+            } catch (error) {
+              console.error('Failed to delete email from local storage:', error);
+            }
+          }
+        }
+      })();
+      
+      return updated;
+    });
   };
 
   const renderScreen = () => {
