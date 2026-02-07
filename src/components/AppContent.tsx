@@ -157,6 +157,23 @@ const AppContent: React.FC = () => {
     };
   }, [currentUserId, setNotifications, setUnreadNotificationCount]);
 
+  // 加载公告数据
+  React.useEffect(() => {
+    if (currentUserId) {
+      const loadAnnouncements = async () => {
+        try {
+          const { default: AnnouncementService } = await import('../../services/announcementService');
+          const announcements = await AnnouncementService.getAnnouncements(currentUserId);
+          setAnnouncements(announcements);
+          setUnreadAnnouncementCount(announcements.filter(a => !a.isRead).length);
+        } catch (error) {
+          console.error('Failed to load announcements:', error);
+        }
+      };
+      loadAnnouncements();
+    }
+  }, [currentUserId, setAnnouncements, setUnreadAnnouncementCount]);
+
   // 回调函数
   const handleOpenProfile = () => setShowProfileModal(true);
   const handleOpenAuth = () => setShowAuthModal(true);
