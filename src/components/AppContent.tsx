@@ -266,7 +266,7 @@ const AppContent: React.FC = () => {
     specificUserId?: string;
   }) => {
     try {
-      const { supabase } = await import('../services/supabaseClient');
+      const { supabase } = await import('../../services/supabaseClient');
       
       // 1. 构造通知数据
       const notificationData = {

@@ -1,4 +1,4 @@
-import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from '../../services/supabaseClient';
 import { ChatMessage } from '../../types';
 
 class ChatService {
