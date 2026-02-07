@@ -34,7 +34,7 @@ class AnnouncementService {
 
         // 创建已读公告ID的集合，只包含is_read为true的记录
         const readIds = new Set(
-          readStatuses?.filter(item => item.is_read || item.isRead).map(item => item.announcement_id) || []
+          readStatuses?.filter(item => item.is_read).map(item => item.announcement_id) || []
         );
 
         return announcements.map(item => ({
@@ -77,7 +77,7 @@ class AnnouncementService {
   }
 
   // 添加新公告
-  static async addAnnouncement(title: string, content: string): Promise<Announcement> {
+  static async addAnnouncement(userId: string, title: string, content: string): Promise<Announcement> {
     const newAnnouncement: Announcement = {
       id: Date.now().toString(),
       title,
@@ -103,16 +103,16 @@ class AnnouncementService {
         if (error) {
           console.error('Failed to add announcement to Supabase:', error);
           // 回退到localStorage
-          this.addLocalAnnouncement(newAnnouncement);
+          this.addLocalAnnouncement(userId, newAnnouncement);
         }
       } else {
         // 使用localStorage作为回退
-        this.addLocalAnnouncement(newAnnouncement);
+        this.addLocalAnnouncement(userId, newAnnouncement);
       }
     } catch (error) {
       console.error('Failed to add announcement:', error);
       // 回退到localStorage
-      this.addLocalAnnouncement(newAnnouncement);
+      this.addLocalAnnouncement(userId, newAnnouncement);
     }
 
     return newAnnouncement;

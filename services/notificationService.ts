@@ -137,25 +137,29 @@ class NotificationService {
   // 处理通知中的接受操作
   async handleNotificationAccept(data: any) {
     // 这里的 data.senderId 和 data.requestId 需确保在发送通知时已存入 data 字段
-    if (data.type === 'friend_request' && this.currentUserId) {
+    if (this.currentUserId && data.senderId && data.requestId) {
       try {
         await FriendsService.acceptFriendRequest(this.currentUserId, data.senderId, data.requestId);
         this.onAddToast('已接受好友申请', 'info');
       } catch (e) {
         this.onAddToast('操作失败', 'error');
       }
+    } else {
+      this.onAddToast('操作失败：缺少必要的信息', 'error');
     }
   }
 
   // 处理通知中的拒绝操作
   async handleNotificationReject(data: any) {
-    if (data.type === 'friend_request' && this.currentUserId) {
+    if (this.currentUserId && data.senderId && data.requestId) {
       try {
         await FriendsService.rejectFriendRequest(this.currentUserId, data.senderId, data.requestId);
         this.onAddToast('已拒绝好友申请', 'info');
       } catch (e) {
         this.onAddToast('操作失败', 'error');
       }
+    } else {
+      this.onAddToast('操作失败：缺少必要的信息', 'error');
     }
   }
 

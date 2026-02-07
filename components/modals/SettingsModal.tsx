@@ -9,11 +9,12 @@ interface SettingsModalProps {
   setAiConfig: (config: AIConfig) => void;
   onSave: (provider: AIProvider, key: string, baseUrl?: string, model?: string) => void;
   onReset: (e: React.MouseEvent) => void;
+  onLogout: () => void;
   onClose: () => void;
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
-  useAiImages, setUseAiImages, aiConfig, setAiConfig, onSave, onReset, onClose 
+  useAiImages, setUseAiImages, aiConfig, setAiConfig, onSave, onReset, onLogout, onClose 
 }) => {
   
   // Helper to handle saving
@@ -92,7 +93,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </>
           )}
           
-          <div className="mb-6 border-t border-slate-700 pt-4">
+          <div className="mb-6 border-t border-slate-700 pt-4 space-y-3">
+            <button onClick={onLogout} className="w-full py-2 bg-slate-800 border border-slate-600 text-slate-300 rounded text-xs font-bold hover:bg-slate-700">
+              退出登录
+            </button>
             <button onClick={onReset} className="w-full py-2 bg-red-900/20 border border-red-800 text-red-400 rounded text-xs font-bold hover:bg-red-900/40">
               ⚠️ 重置所有游戏数据
             </button>

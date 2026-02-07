@@ -34,7 +34,7 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({
                   <img src={req.avatarUrl} className="w-10 h-10 rounded-full border-2 border-yellow-500/50" alt="" />
                   <div className="text-left">
                     <div className="text-white font-bold text-sm">{req.username}</div>
-                    <div className="text-[10px] text-slate-500">{new Date(req.timestamp).toLocaleDateString()}</div>
+                    <div className="text-[10px] text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</div>
                   </div>
                 </div>
                 <div className="flex gap-2">

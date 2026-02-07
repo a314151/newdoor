@@ -316,7 +316,7 @@ class FriendsService {
             userId: sender.id,
             username: username,
             avatarUrl: avatarUrl,
-            timestamp: new Date(req.created_at).getTime()
+            createdAt: new Date(req.created_at).getTime()
           };
         } else {
           return {
@@ -324,7 +324,7 @@ class FriendsService {
             userId: req.user_id,
             username: '未知用户',
             avatarUrl: 'https://placehold.co/100x100?text=?',
-            timestamp: new Date(req.created_at).getTime()
+            createdAt: new Date(req.created_at).getTime()
           };
         }
       });
