@@ -94,8 +94,7 @@ class AnnouncementService {
             id: newAnnouncement.id,
             title: newAnnouncement.title,
             content: newAnnouncement.content,
-            created_at: new Date(newAnnouncement.createdAt).toISOString(),
-            is_read: newAnnouncement.isRead
+            created_at: new Date(newAnnouncement.createdAt).toISOString()
           })
           .select()
           .single();

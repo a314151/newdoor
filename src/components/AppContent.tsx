@@ -53,7 +53,7 @@ const AppContent: React.FC = () => {
     showAuthModal, setShowAuthModal, 
     showProfileModal, setShowProfileModal, 
     showNotificationModal, setShowNotificationModal, notificationData,
-    unreadEmailCount, setUnreadEmailCount, unreadAnnouncementCount,
+    unreadEmailCount, setUnreadEmailCount, unreadAnnouncementCount, setUnreadAnnouncementCount,
     currentChatFriend, setCurrentChatFriend, chatMessages, setChatMessages,
     emails, setEmails,
     friends, setFriends, pendingRequests, setPendingRequests, leaderboardData, setLeaderboardData, isLeaderboardLoading, leaderboardSortBy, setLeaderboardSortBy,
