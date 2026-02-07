@@ -7,8 +7,8 @@ interface FriendsScreenProps {
   pendingRequests: FriendRequest[];
   onBack: () => void;
   onOpenChat: (friend: Friend) => void;
-  onAcceptRequest: (requestId: string) => void;
-  onRejectRequest: (requestId: string) => void;
+  onAcceptRequest: (requestId: string, senderId: string) => void;
+  onRejectRequest: (requestId: string, senderId: string) => void;
   onRemoveFriend: (friendId: string) => void;
 }
 
@@ -38,8 +38,8 @@ const FriendsScreen: React.FC<FriendsScreenProps> = ({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => onAcceptRequest(req.id)} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-md text-xs font-bold transition-all">接受</button>
-                  <button onClick={() => onRejectRequest(req.id)} className="px-3 py-1 bg-slate-700 hover:bg-red-600 text-white rounded-md text-xs font-bold transition-all">拒绝</button>
+                  <button onClick={() => onAcceptRequest(req.id, req.userId)} className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white rounded-md text-xs font-bold transition-all">接受</button>
+                  <button onClick={() => onRejectRequest(req.id, req.userId)} className="px-3 py-1 bg-slate-700 hover:bg-red-600 text-white rounded-md text-xs font-bold transition-all">拒绝</button>
                 </div>
               </div>
             ))}

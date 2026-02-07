@@ -92,22 +92,72 @@ export const saveToCloud = async (
   }
 };
 
+// 用于缓存 rank 结果，避免频繁请求
+let rankCache: { [key: string]: number | null } = {};
+let rankCacheTime: { [key: string]: number } = {};
+const CACHE_DURATION = 5 * 60 * 1000; // 5分钟缓存
+
 export const fetchAgentRank = async (userCreatedAt: string) => {
   try {
     if (!isSupabaseConfigured()) {
       return null;
     }
 
-    const { count, error } = await supabase
-      .from('game_saves')
-      .select('*', { count: 'exact', head: true })
-      .lt('created_at', userCreatedAt);
-
-    if (error) {
-      throw error;
+    // 检查 userCreatedAt 是否有效
+    if (!userCreatedAt || isNaN(new Date(userCreatedAt).getTime())) {
+      console.warn('Invalid userCreatedAt for rank fetch:', userCreatedAt);
+      return null;
     }
 
-    return count !== null ? count + 1 : null;
+    // 检查缓存
+    const cacheKey = userCreatedAt;
+    const now = Date.now();
+    if (rankCache[cacheKey] !== undefined && (now - rankCacheTime[cacheKey]) < CACHE_DURATION) {
+      return rankCache[cacheKey];
+    }
+
+    try {
+      // 使用 RPC 函数获取排名，避免直接查询
+      const { data, error } = await supabase
+        .rpc('get_user_rank', { user_created_at: userCreatedAt });
+
+      if (error) {
+        console.error('Error fetching agent rank via RPC:', error);
+        // 如果 RPC 失败，尝试使用传统的 COUNT 查询
+        const { count, countError } = await supabase
+          .from('game_saves')
+          .select('user_id', { count: 'exact', head: true })
+          .lt('created_at', userCreatedAt);
+
+        if (countError) {
+          console.error('Error fetching agent rank via COUNT:', countError);
+          return null;
+        }
+
+        const rank = count !== null ? count + 1 : null;
+        
+        // 更新缓存
+        if (rank !== null) {
+          rankCache[cacheKey] = rank;
+          rankCacheTime[cacheKey] = now;
+        }
+
+        return rank;
+      }
+
+      const rank = data as number | null;
+      
+      // 更新缓存
+      if (rank !== null) {
+        rankCache[cacheKey] = rank;
+        rankCacheTime[cacheKey] = now;
+      }
+
+      return rank;
+    } catch (error) {
+      console.error('Failed to fetch agent rank:', error);
+      return null;
+    }
   } catch (error) {
     console.error('Failed to fetch agent rank:', error);
     return null;

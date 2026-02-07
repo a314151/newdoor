@@ -24,6 +24,7 @@ export const useUserManagement = () => {
 
   const { addToast } = useUI();
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rankFetchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 初始化数据
   useEffect(() => {
@@ -82,7 +83,9 @@ export const useUserManagement = () => {
         setCurrentUserId(session.user.id);
         setSyncStatus('saved');
         handleFetchFromCloud(session.user.id);
-        handleFetchAgentRank(session.user.created_at);
+        if (session.user.created_at) {
+          handleFetchAgentRank(session.user.created_at);
+        }
       }
     });
 
@@ -93,7 +96,9 @@ export const useUserManagement = () => {
         setCurrentUserId(session.user.id);
         setSyncStatus('saved');
         handleFetchFromCloud(session.user.id);
-        handleFetchAgentRank(session.user.created_at);
+        if (session.user.created_at) {
+          handleFetchAgentRank(session.user.created_at);
+        }
       } else {
         setUserEmail(null);
         setCurrentUserId(null);
@@ -185,14 +190,22 @@ export const useUserManagement = () => {
   };
 
   const handleFetchAgentRank = async (userCreatedAt: string) => {
-    try {
-      const rank = await fetchAgentRank(userCreatedAt);
-      if (rank !== null) {
-        setAgentRank(rank);
-      }
-    } catch (error) {
-      console.error('Failed to fetch agent rank:', error);
+    // 清除之前的超时
+    if (rankFetchTimeoutRef.current) {
+      clearTimeout(rankFetchTimeoutRef.current);
     }
+
+    // 设置新的超时，延迟 1 秒执行
+    rankFetchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const rank = await fetchAgentRank(userCreatedAt);
+        if (rank !== null) {
+          setAgentRank(rank);
+        }
+      } catch (error) {
+        console.error('Failed to fetch agent rank:', error);
+      }
+    }, 1000);
   };
 
   const handleLogout = async () => {

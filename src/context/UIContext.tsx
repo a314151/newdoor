@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { ToastMessage, Email, Friend, FriendRequest, ChatMessage, LeaderboardEntry, Announcement } from '../../types';
+import { AppNotification } from '../../services/notificationService';
 
 interface UIContextType {
   toasts: ToastMessage[];
@@ -61,6 +62,10 @@ interface UIContextType {
   setIsSummoning: React.Dispatch<React.SetStateAction<boolean>>;
   lastSummonedHero: any | null;
   setLastSummonedHero: React.Dispatch<React.SetStateAction<any | null>>;
+  notifications: AppNotification[];
+  setNotifications: React.Dispatch<React.SetStateAction<AppNotification[]>>;
+  unreadNotificationCount: number;
+  setUnreadNotificationCount: React.Dispatch<React.SetStateAction<number>>;
 }
 
 const UIContext = createContext<UIContextType | undefined>(undefined);
@@ -107,6 +112,8 @@ export const UIProvider: React.FC<UIProviderProps> = ({ children }) => {
   const [summonInput, setSummonInput] = useState("");
   const [isSummoning, setIsSummoning] = useState(false);
   const [lastSummonedHero, setLastSummonedHero] = useState<any | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
 
   const addToast = (msg: string, type: 'info' | 'loot' | 'error' = 'info') => {
     setToasts(prevToasts => {
@@ -170,7 +177,11 @@ export const UIProvider: React.FC<UIProviderProps> = ({ children }) => {
     isSummoning,
     setIsSummoning,
     lastSummonedHero,
-    setLastSummonedHero
+    setLastSummonedHero,
+    notifications,
+    setNotifications,
+    unreadNotificationCount,
+    setUnreadNotificationCount
   };
 
   return (

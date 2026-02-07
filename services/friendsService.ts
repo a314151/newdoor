@@ -184,7 +184,7 @@ class FriendsService {
   }
 
   // 3. 接受好友申请：修复逻辑，确保正确创建双向好友关系
-  static async acceptFriendRequest(currentUserId: string, senderId: string, requestId: string): Promise<boolean> {
+  static async acceptFriendRequest(currentUserId: string, requestId: string, senderId: string): Promise<boolean> {
     try {
       console.log('接受好友申请:', senderId, '->', currentUserId);
 
@@ -203,20 +203,25 @@ class FriendsService {
       }
 
       // 2. 创建反向好友关系（确保双向好友关系）
-      const { error: createError } = await supabase
-        .from('friend_relationships')
-        .upsert(
-          { 
-            user_id: currentUserId, 
-            friend_id: senderId, 
-            status: 'accepted', 
-            updated_at: new Date().toISOString() 
-          },
-          { onConflict: 'user_id, friend_id' }
-        );
+      try {
+        const { error: createError } = await supabase
+          .from('friend_relationships')
+          .upsert(
+            { 
+              user_id: currentUserId, 
+              friend_id: senderId, 
+              status: 'accepted', 
+              updated_at: new Date().toISOString() 
+            },
+            { onConflict: 'user_id, friend_id' }
+          );
 
-      if (createError) {
-        console.error('创建反向好友关系失败:', createError);
+        if (createError) {
+          console.warn('创建反向好友关系失败（可能是因为用户不存在）:', createError);
+          // 继续执行，不影响主流程
+        }
+      } catch (error) {
+        console.warn('创建反向好友关系异常（可能是因为用户不存在）:', error);
         // 继续执行，不影响主流程
       }
 

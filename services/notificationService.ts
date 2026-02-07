@@ -1,186 +1,212 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-import FriendsService from './friendsService';
-import { RealtimeChannel } from '@supabase/supabase-js'; // 导入类型定义
-import { Email, EmailContentType } from '../types';
 
-interface NotificationData {
-  title: string;
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  type: string;
   message: string;
-  type: 'info' | 'success' | 'error' | 'friend_request';
-  data: any;
-}
-
-interface NotificationServiceProps {
-  onShowNotification: (data: NotificationData) => void;
-  onAddToast: (message: string, type: 'info' | 'loot' | 'error') => void;
-  onAddEmail: (email: Email) => void;
-  currentUserId: string | null;
+  content?: string;
+  data?: any;
+  read: boolean;
+  created_at: string;
 }
 
 class NotificationService {
-  private onShowNotification: (data: NotificationData) => void;
-  private onAddToast: (message: string, type: 'info' | 'loot' | 'error') => void;
-  private onAddEmail: (email: Email) => void;
-  private currentUserId: string | null;
-  // 在 V2 中，订阅返回的是 RealtimeChannel 对象
-  private subscription: RealtimeChannel | null = null;
-
-  constructor(props: NotificationServiceProps) {
-    this.onShowNotification = props.onShowNotification;
-    this.onAddToast = props.onAddToast;
-    this.onAddEmail = props.onAddEmail;
-    this.currentUserId = props.currentUserId;
-  }
-
-  /**
-   * 启动实时通知监听
-   * 修正了 Supabase V2 的订阅语法
-   */
-  startNotificationListener(userId: string) {
-    if (!isSupabaseConfigured() || !userId) return;
-
-    // 如果已经存在监听，先停止旧的
-    this.stopNotificationListener();
-
+  // 获取用户的通知
+  static async getNotifications(userId: string): Promise<AppNotification[]> {
     try {
-      console.log(`正在为用户 ${userId} 启动实时通知监听...`);
+      if (!isSupabaseConfigured()) {
+        return this.getLocalNotifications(userId);
+      }
 
-      // 1. 创建频道名（建议加上用户ID以示区分）
-      const channelName = `notifications-user-${userId}`;
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
-      // 2. 链式调用订阅逻辑
-      this.subscription = supabase
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'notifications',
-            filter: `user_id=eq.${userId}`
-          },
-          (payload) => {
-            console.log('收到新通知原始数据:', payload);
-            const notification = payload.new;
+      if (error) {
+        console.error('Failed to get notifications from Supabase:', error);
+        return this.getLocalNotifications(userId);
+      }
 
-            // 在游戏界面左侧/右侧弹出通用 Toast 提示
-            if (notification.message) {
-              this.onAddToast(notification.message, 'info');
-            }
-
-            // 创建邮件通知，添加到邮件系统中
-            // 对于系统通知，使用 data 字段中的详细内容和附件
-            let emailSubject = notification.type === 'friend_request' ? '好友申请' : '系统通知';
-            let emailContent = notification.message || '你收到了一条新通知';
-            let emailAttachments = [];
-            
-            // 如果是系统通知且包含详细数据
-            if (notification.type === 'system_notification' && notification.data) {
-              emailSubject = notification.data.subject || emailSubject;
-              emailContent = notification.data.content || emailContent;
-              emailAttachments = notification.data.attachments || [];
-            }
-            
-            const email: Email = {
-              id: notification.id,
-              subject: emailSubject,
-              content: emailContent,
-              attachments: emailAttachments,
-              isRead: false,
-              isClaimed: false,
-              timestamp: new Date(notification.created_at || Date.now()).getTime(),
-              sender: '系统'
-            };
-            
-            // 将通知添加到邮件系统中
-            this.onAddEmail(email);
-
-            // 针对好友申请类型的特殊处理：显示带有 接受/拒绝 按钮的弹窗
-            if (notification.type === 'friend_request') {
-              // 提取 senderName，如果 data 里没传则显示"未知用户"
-              const senderName = notification.data?.senderName || '未知用户';
-
-              this.onShowNotification({
-                title: '好友申请',
-                message: `${senderName} 向你发送了好友申请，是否接受？`,
-                type: 'friend_request',
-                data: {
-                  ...notification.data,
-                  // 确保这里包含处理申请所需的 ID
-                  requestId: notification.id
-                }
-              });
-            }
-          }
-        )
-        .subscribe((status) => {
-          console.log(`实时通知订阅状态: ${status}`);
-        });
-
+      return data || [];
     } catch (error) {
-      console.error('启动实时通知监听失败:', error);
+      console.error('Failed to get notifications:', error);
+      return this.getLocalNotifications(userId);
     }
   }
 
-  /**
-   * 停止通知监听
-   * 使用 supabase.removeChannel 进行物理断开
-   */
-  stopNotificationListener() {
-    if (this.subscription) {
-      supabase.removeChannel(this.subscription);
-      this.subscription = null;
-      console.log('实时通知监听已彻底停止');
-    }
-  }
-
-  // 处理通知中的接受操作
-  async handleNotificationAccept(data: any) {
-    // 这里的 data.senderId 和 data.requestId 需确保在发送通知时已存入 data 字段
-    if (this.currentUserId && data.senderId && data.requestId) {
-      try {
-        await FriendsService.acceptFriendRequest(this.currentUserId, data.senderId, data.requestId);
-        this.onAddToast('已接受好友申请', 'info');
-      } catch (e) {
-        this.onAddToast('操作失败', 'error');
+  // 获取未读通知数量
+  static async getUnreadCount(userId: string): Promise<number> {
+    try {
+      if (!isSupabaseConfigured()) {
+        const notifications = this.getLocalNotifications(userId);
+        return notifications.filter(n => !n.read).length;
       }
-    } else {
-      this.onAddToast('操作失败：缺少必要的信息', 'error');
-    }
-  }
 
-  // 处理通知中的拒绝操作
-  async handleNotificationReject(data: any) {
-    if (this.currentUserId && data.senderId && data.requestId) {
-      try {
-        await FriendsService.rejectFriendRequest(this.currentUserId, data.senderId, data.requestId);
-        this.onAddToast('已拒绝好友申请', 'info');
-      } catch (e) {
-        this.onAddToast('操作失败', 'error');
+      const { count, error } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('read', false);
+
+      if (error) {
+        console.error('Failed to get unread count from Supabase:', error);
+        const notifications = this.getLocalNotifications(userId);
+        return notifications.filter(n => !n.read).length;
       }
-    } else {
-      this.onAddToast('操作失败：缺少必要的信息', 'error');
+
+      return count || 0;
+    } catch (error) {
+      console.error('Failed to get unread count:', error);
+      return 0;
     }
   }
 
-  // 发送开发者模式通知（本地测试用）
-  sendDeveloperNotification(message: string) {
-    this.onAddToast(`开发者通知: ${message}`, 'info');
-  }
+  // 标记通知为已读
+  static async markAsRead(userId: string, notificationId: string): Promise<void> {
+    try {
+      if (!isSupabaseConfigured()) {
+        this.markLocalAsRead(userId, notificationId);
+        return;
+      }
 
-  // 发送好友申请通知（调用后端服务接口）
-  async sendFriendRequestNotification(senderId: string, receiverId: string) {
-    return FriendsService.sendFriendRequestNotification(senderId, receiverId);
-  }
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notificationId)
+        .eq('user_id', userId);
 
-  // 更新当前用户ID并重新挂载监听
-  updateCurrentUserId(userId: string | null) {
-    this.currentUserId = userId;
-    if (userId) {
-      this.startNotificationListener(userId);
-    } else {
-      this.stopNotificationListener();
+      if (error) {
+        console.error('Failed to mark notification as read in Supabase:', error);
+        this.markLocalAsRead(userId, notificationId);
+      }
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+      this.markLocalAsRead(userId, notificationId);
     }
+  }
+
+  // 标记所有通知为已读
+  static async markAllAsRead(userId: string): Promise<void> {
+    try {
+      if (!isSupabaseConfigured()) {
+        this.markAllLocalAsRead(userId);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', userId)
+        .eq('read', false);
+
+      if (error) {
+        console.error('Failed to mark all notifications as read in Supabase:', error);
+        this.markAllLocalAsRead(userId);
+      }
+    } catch (error) {
+      console.error('Failed to mark all notifications as read:', error);
+      this.markAllLocalAsRead(userId);
+    }
+  }
+
+  // 删除通知
+  static async deleteNotification(userId: string, notificationId: string): Promise<void> {
+    try {
+      if (!isSupabaseConfigured()) {
+        this.deleteLocalNotification(userId, notificationId);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', notificationId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Failed to delete notification from Supabase:', error);
+        this.deleteLocalNotification(userId, notificationId);
+      }
+    } catch (error) {
+      console.error('Failed to delete notification:', error);
+      this.deleteLocalNotification(userId, notificationId);
+    }
+  }
+
+  // 订阅通知变化
+  static subscribeToNotifications(userId: string, callback: (notifications: AppNotification[]) => void): () => void {
+    if (!isSupabaseConfigured()) {
+      return () => {};
+    }
+
+    const subscription = supabase
+      .channel('notifications-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`
+        },
+        async () => {
+          const notifications = await this.getNotifications(userId);
+          callback(notifications);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }
+
+  // 从 localStorage 获取通知（回退方案）
+  private static getLocalNotifications(userId: string): AppNotification[] {
+    try {
+      const key = `inf_notifications_${userId}`;
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : [];
+    } catch (error) {
+      console.error('Failed to get local notifications:', error);
+      return [];
+    }
+  }
+
+  // 保存通知到 localStorage（回退方案）
+  private static saveLocalNotifications(userId: string, notifications: AppNotification[]): void {
+    try {
+      const key = `inf_notifications_${userId}`;
+      localStorage.setItem(key, JSON.stringify(notifications));
+    } catch (error) {
+      console.error('Failed to save local notifications:', error);
+    }
+  }
+
+  // 标记本地通知为已读（回退方案）
+  private static markLocalAsRead(userId: string, notificationId: string): void {
+    const notifications = this.getLocalNotifications(userId);
+    const updated = notifications.map(n => 
+      n.id === notificationId ? { ...n, read: true } : n
+    );
+    this.saveLocalNotifications(userId, updated);
+  }
+
+  // 标记所有本地通知为已读（回退方案）
+  private static markAllLocalAsRead(userId: string): void {
+    const notifications = this.getLocalNotifications(userId);
+    const updated = notifications.map(n => ({ ...n, read: true }));
+    this.saveLocalNotifications(userId, updated);
+  }
+
+  // 删除本地通知（回退方案）
+  private static deleteLocalNotification(userId: string, notificationId: string): void {
+    const notifications = this.getLocalNotifications(userId);
+    const updated = notifications.filter(n => n.id !== notificationId);
+    this.saveLocalNotifications(userId, updated);
   }
 }
 

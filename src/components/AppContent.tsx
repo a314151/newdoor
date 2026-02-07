@@ -4,7 +4,7 @@ import { useUser } from '../context/UserContext';
 import { useUI } from '../context/UIContext';
 import { useUserManagement } from '../hooks/useUserManagement';
 import { useGameLogic } from '../hooks/useGameLogic';
-import { GameState, AIProvider } from '../../types';
+import { GameState, AIProvider, EmailContentType, ItemType } from '../../types';
 
 // Modular Component Imports
 import GameGrid from '../../components/GameGrid';
@@ -53,15 +53,109 @@ const AppContent: React.FC = () => {
     showAuthModal, setShowAuthModal, 
     showProfileModal, setShowProfileModal, 
     showNotificationModal, setShowNotificationModal, notificationData,
-    unreadEmailCount, unreadAnnouncementCount,
+    unreadEmailCount, setUnreadEmailCount, unreadAnnouncementCount,
     currentChatFriend, setCurrentChatFriend, chatMessages, setChatMessages,
     emails, setEmails,
-    friends, pendingRequests, leaderboardData, isLeaderboardLoading, leaderboardSortBy, setLeaderboardSortBy,
-    summonInput, setSummonInput, isSummoning, lastSummonedHero
+    friends, setFriends, pendingRequests, setPendingRequests, leaderboardData, setLeaderboardData, isLeaderboardLoading, leaderboardSortBy, setLeaderboardSortBy,
+    summonInput, setSummonInput, isSummoning, lastSummonedHero,
+    notifications, setNotifications, unreadNotificationCount, setUnreadNotificationCount
   } = useUI();
 
   const { handleLogout, handleHardReset, handleSaveConfig } = useUserManagement();
   const { handleGainXp, addToInventory, movePlayer, handleAttack } = useGameLogic();
+
+  // 加载排行榜数据
+  React.useEffect(() => {
+    if (gameState === GameState.LEADERBOARD) {
+      const loadLeaderboard = async () => {
+        try {
+          const { fetchLeaderboardData } = await import('../utils/cloudSyncUtils');
+          const result = await fetchLeaderboardData(leaderboardSortBy);
+          if (result && result.data) {
+            setLeaderboardData(result.data);
+          }
+        } catch (error) {
+          console.error('Failed to load leaderboard:', error);
+        }
+      };
+      loadLeaderboard();
+    }
+  }, [gameState, leaderboardSortBy, setLeaderboardData]);
+
+  // 加载好友数据
+  React.useEffect(() => {
+    if (gameState === GameState.FRIENDS && currentUserId) {
+      const loadFriends = async () => {
+        try {
+          const FriendsService = (await import('../../services/friendsService')).default;
+          const friendsData = await FriendsService.getFriends(currentUserId);
+          const requestsData = await FriendsService.getFriendRequests(currentUserId);
+          setFriends(friendsData);
+          setPendingRequests(requestsData);
+        } catch (error) {
+          console.error('Failed to load friends:', error);
+        }
+      };
+      loadFriends();
+    }
+  }, [gameState, currentUserId, setFriends, setPendingRequests]);
+
+  // 加载邮件数据
+  React.useEffect(() => {
+    if (gameState === GameState.EMAIL && currentUserId) {
+      const loadEmails = async () => {
+        try {
+          const { loadEmails } = await import('../utils/storageUtils');
+          const emailsData = loadEmails(currentUserId);
+          setEmails(emailsData);
+          setUnreadEmailCount(emailsData.filter((e: any) => !e.isRead).length);
+        } catch (error) {
+          console.error('Failed to load emails:', error);
+        }
+      };
+      loadEmails();
+    }
+  }, [gameState, currentUserId, setEmails, setUnreadEmailCount]);
+
+  // 加载通知数据
+  React.useEffect(() => {
+    if (currentUserId) {
+      const loadNotifications = async () => {
+        try {
+          const NotificationService = (await import('../../services/notificationService')).default;
+          const notifications = await NotificationService.getNotifications(currentUserId);
+          setNotifications(notifications);
+          setUnreadNotificationCount(notifications.filter(n => !n.read).length);
+        } catch (error) {
+          console.error('Failed to load notifications:', error);
+        }
+      };
+      loadNotifications();
+    }
+  }, [currentUserId, setNotifications, setUnreadNotificationCount]);
+
+  // 订阅通知变化
+  React.useEffect(() => {
+    if (!currentUserId) return;
+
+    let unsubscribe: () => void;
+
+    const setupSubscription = async () => {
+      const { default: NotificationService } = await import('../../services/notificationService');
+      unsubscribe = NotificationService.subscribeToNotifications(currentUserId, (notifications) => {
+        setNotifications(notifications);
+        setUnreadNotificationCount(notifications.filter(n => !n.read).length);
+      });
+    };
+
+    setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, [currentUserId, setNotifications, setUnreadNotificationCount]);
 
   // 回调函数
   const handleOpenProfile = () => setShowProfileModal(true);
@@ -74,7 +168,6 @@ const AppContent: React.FC = () => {
   const handleOpenHistory = () => setGameState(GameState.HISTORY_VIEW);
   const handleOpenInventory = () => setShowInventory(true);
   const handleOpenSettings = () => setShowSettings(true);
-  const handleOpenCreatorMode = () => setGameState(GameState.CREATOR_MODE);
   const handleOpenLeaderboard = () => setGameState(GameState.LEADERBOARD);
   const handleOpenFriends = () => setGameState(GameState.FRIENDS);
   const handleOpenEmail = () => setGameState(GameState.EMAIL);
@@ -84,6 +177,151 @@ const AppContent: React.FC = () => {
     setHeroes(prevHeroes => prevHeroes.filter(hero => hero.id !== id));
   };
   const handleBackToMenu = () => setGameState(GameState.MENU);
+
+  // 好友请求处理
+  const handleAcceptFriendRequest = async (requestId: string, senderId: string) => {
+    try {
+      const FriendsService = (await import('../../services/friendsService')).default;
+      const success = await FriendsService.acceptFriendRequest(currentUserId!, requestId, senderId);
+      if (success) {
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+        // 重新加载好友列表
+        const friendsData = await FriendsService.getFriends(currentUserId!);
+        setFriends(friendsData);
+      }
+    } catch (error) {
+      console.error('Failed to accept friend request:', error);
+    }
+  };
+
+  const handleRejectFriendRequest = async (requestId: string, senderId: string) => {
+    try {
+      const FriendsService = (await import('../../services/friendsService')).default;
+      const success = await FriendsService.rejectFriendRequest(currentUserId!, requestId, senderId);
+      if (success) {
+        setPendingRequests(prev => prev.filter(r => r.id !== requestId));
+      }
+    } catch (error) {
+      console.error('Failed to reject friend request:', error);
+    }
+  };
+
+  const handleRemoveFriend = async (friendId: string) => {
+    try {
+      const FriendsService = (await import('../../services/friendsService')).default;
+      const success = await FriendsService.removeFriend(currentUserId!, friendId);
+      if (success) {
+        setFriends(prev => prev.filter(f => f.id !== friendId));
+      }
+    } catch (error) {
+      console.error('Failed to remove friend:', error);
+    }
+  };
+
+  // 创作者模式密码验证
+  const handleOpenCreatorMode = () => {
+    setShowPasswordModal(true);
+  };
+
+  // 公告管理
+  const handleAddAnnouncement = async (title: string, content: string) => {
+    const newAnnouncement = {
+      id: Date.now().toString(),
+      title,
+      content,
+      createdAt: Date.now(),
+      isRead: false
+    };
+    
+    // 同时保存到 Supabase
+    if (currentUserId) {
+      try {
+        const { default: AnnouncementService } = await import('../../services/announcementService');
+        await AnnouncementService.addAnnouncement(currentUserId, title, content);
+      } catch (error) {
+        console.error('Failed to save announcement to Supabase:', error);
+      }
+    }
+    
+    setAnnouncements(prev => [newAnnouncement, ...prev]);
+  };
+
+  const handleDeleteAnnouncement = (id: string) => {
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
+  };
+
+  // 发送通知
+  const handleSendNotification = async (data: {
+    subject: string;
+    content: string;
+    attachments: Array<{
+      type: EmailContentType;
+      itemType?: ItemType;
+      amount?: number;
+      level?: number;
+      xp?: number;
+      stones?: number;
+    }>;
+    sendToAll: boolean;
+    specificUserId?: string;
+  }) => {
+    try {
+      const { supabase } = await import('../services/supabaseClient');
+      
+      // 1. 构造通知数据
+      const notificationData = {
+        type: 'system_notification',
+        message: data.subject,
+        content: data.content,
+        data: {
+          subject: data.subject,
+          content: data.content,
+          attachments: data.attachments
+        },
+        read: false,
+        created_at: new Date().toISOString()
+      };
+
+      // 2. 发送给特定用户或所有用户
+      if (data.sendToAll) {
+        // 获取所有用户ID
+        const { data: users, error: usersError } = await supabase
+          .from('profiles')
+          .select('id');
+        
+        if (usersError) throw usersError;
+        
+        if (users && users.length > 0) {
+          const notifications = users.map(user => ({
+            ...notificationData,
+            user_id: user.id
+          }));
+          
+          const { error: insertError } = await supabase
+            .from('notifications')
+            .insert(notifications);
+            
+          if (insertError) throw insertError;
+        }
+      } else if (data.specificUserId) {
+        const notification = {
+          ...notificationData,
+          user_id: data.specificUserId
+        };
+        
+        const { error: insertError } = await supabase
+          .from('notifications')
+          .insert(notification);
+          
+        if (insertError) throw insertError;
+      }
+      
+      alert('通知发送成功！');
+    } catch (error) {
+      console.error('发送通知失败:', error);
+      alert('发送通知失败，请检查控制台日志。');
+    }
+  };
 
   // Announcement Handlers
   const handleCloseAnnouncements = () => setIsAnnouncementVisible(false);
@@ -232,6 +470,10 @@ const AppContent: React.FC = () => {
             stats={stats}
             setStats={setStats}
             onBack={handleBackToMenu}
+            onAddAnnouncement={handleAddAnnouncement}
+            announcements={announcements}
+            onDeleteAnnouncement={handleDeleteAnnouncement}
+            onSendNotification={handleSendNotification}
           />
         );
       case GameState.DISCUSSION:
@@ -273,9 +515,9 @@ const AppContent: React.FC = () => {
               setCurrentChatFriend(friend);
               setGameState(GameState.CHAT);
             }}
-            onAcceptRequest={() => {}} // TODO
-            onRejectRequest={() => {}} // TODO
-            onRemoveFriend={() => {}} // TODO
+            onAcceptRequest={handleAcceptFriendRequest}
+            onRejectRequest={handleRejectFriendRequest}
+            onRemoveFriend={handleRemoveFriend}
           />
         );
       case GameState.CHAT:
@@ -332,7 +574,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="app-content">
+    <div className="app-content w-full min-h-screen flex flex-col items-center justify-center px-4">
       {/* 同步状态指示器 */}
       <div className="fixed top-4 left-4 z-50 flex items-center gap-2 bg-black/50 px-3 py-1.5 rounded-full border border-slate-700 backdrop-blur-sm pointer-events-none">
         <div className={`w-2.5 h-2.5 rounded-full ${
@@ -386,7 +628,10 @@ const AppContent: React.FC = () => {
       {showPasswordModal && (
         <PasswordModal 
           onClose={() => setShowPasswordModal(false)} 
-          onSuccess={() => setShowPasswordModal(false)}
+          onSuccess={() => {
+            setShowPasswordModal(false);
+            setGameState(GameState.CREATOR_MODE);
+          }}
         />
       )}
       {showProfileModal && (

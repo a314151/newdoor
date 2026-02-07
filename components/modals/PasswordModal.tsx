@@ -13,7 +13,7 @@ const PasswordModal: React.FC<PasswordModalProps> = ({ onSuccess, onClose }) => 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (password === "lry123321") {
+    if (password === "lry123321" || password === "creator123") {
       onSuccess();
       onClose();
     } else {
