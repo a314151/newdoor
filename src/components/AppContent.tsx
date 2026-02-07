@@ -119,9 +119,9 @@ const AppContent: React.FC = () => {
 
   // 加载背包数据
   React.useEffect(() => {
-    const loadInventory = () => {
+    const loadInventory = async () => {
       try {
-        const { loadLocalData } = require('../utils/storageUtils');
+        const { loadLocalData } = await import('../utils/storageUtils');
         const localData = loadLocalData();
         if (localData.inventory && Array.isArray(localData.inventory)) {
           setInventory(localData.inventory);
@@ -130,6 +130,8 @@ const AppContent: React.FC = () => {
         console.error('Failed to load inventory:', error);
       }
     };
+    
+    // 立即调用异步函数
     loadInventory();
   }, []);
 
