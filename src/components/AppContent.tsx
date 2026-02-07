@@ -45,7 +45,7 @@ const AppContent: React.FC = () => {
     useAiImages, setUseAiImages, aiConfig, setAiConfig
   } = useUser();
   const { 
-    toasts, removeToast, 
+    toasts, removeToast, addToast,
     announcements, setAnnouncements, isAnnouncementVisible, setIsAnnouncementVisible,
     showSettings, setShowSettings, 
     showInventory, setShowInventory, 
@@ -114,17 +114,45 @@ const AppContent: React.FC = () => {
           const notifications = await NotificationService.getNotifications(currentUserId);
           
           // 3. 将通知转换为邮件格式
-          const notificationEmails = notifications.map(notification => ({
-            id: `notification_${notification.id}`,
-            subject: notification.message || '系统通知',
-            content: notification.content || notification.data?.content || '',
-            attachments: notification.data?.attachments || [],
-            isRead: notification.read,
-            isClaimed: false,
-            timestamp: new Date(notification.created_at).getTime(),
-            sender: '系统',
-            friendRequest: undefined
-          }));
+          const notificationEmails = notifications.map(notification => {
+            const baseEmail = {
+              id: `notification_${notification.id}`,
+              subject: notification.message || '系统通知',
+              content: notification.content || notification.data?.content || '',
+              attachments: notification.data?.attachments || [],
+              isRead: notification.read,
+              isClaimed: false,
+              timestamp: new Date(notification.created_at).getTime(),
+              sender: '系统',
+              friendRequest: undefined
+            };
+            
+            // 处理好友申请通知
+            if (notification.type === 'friend_request' && notification.data?.senderId) {
+              return {
+                ...baseEmail,
+                subject: '好友申请',
+                content: notification.message || `${notification.data?.senderName || '有人'} 向你发送了好友申请`,
+                friendRequest: {
+                  senderId: notification.data.senderId,
+                  senderName: notification.data.senderName || '未知用户',
+                  requestId: notification.data.requestId
+                }
+              };
+            }
+            
+            // 处理好友申请接受通知
+            if (notification.type === 'friend_request_accepted' && notification.data?.senderId) {
+              return {
+                ...baseEmail,
+                subject: '好友申请已接受',
+                content: notification.message || `${notification.data?.senderName || '有人'} 已接受了你的好友申请`,
+                friendRequest: undefined
+              };
+            }
+            
+            return baseEmail;
+          });
           
           // 4. 合并邮件，去重（优先保留本地邮件）
           const emailMap = new Map();
@@ -287,6 +315,43 @@ const AppContent: React.FC = () => {
     setHeroes(prevHeroes => prevHeroes.filter(hero => hero.id !== id));
   };
   const handleBackToMenu = () => setGameState(GameState.MENU);
+
+  // 添加好友处理
+  const handleAddFriend = async (friendId: string) => {
+    if (!currentUserId) {
+      console.error('用户未登录，无法发送好友申请');
+      return;
+    }
+
+    try {
+      const FriendsService = (await import('../../services/friendsService')).default;
+      const success = await FriendsService.sendFriendRequestNotification(currentUserId, friendId);
+      
+      if (success) {
+        // 显示成功消息
+        addToast('好友申请已发送', 'info');
+        
+        // 可选：添加本地邮件通知
+        const newEmail = {
+          id: `friend_request_${Date.now()}`,
+          subject: '好友申请已发送',
+          content: `你的好友申请已成功发送，等待对方确认。`,
+          attachments: [],
+          isRead: true,
+          isClaimed: false,
+          timestamp: Date.now(),
+          sender: '系统',
+          friendRequest: undefined
+        };
+        setEmails(prev => [newEmail, ...prev]);
+      } else {
+        addToast('发送申请失败，可能已是好友或已有待处理申请', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to send friend request:', error);
+      addToast('发送申请时发生错误', 'error');
+    }
+  };
 
   // 好友请求处理
   const handleAcceptFriendRequest = async (requestId: string, senderId: string) => {
@@ -734,6 +799,7 @@ const AppContent: React.FC = () => {
             sortBy={leaderboardSortBy}
             onToggleSort={() => setLeaderboardSortBy(prev => prev === 'level' ? 'registerTime' : 'level')}
             onBack={handleBackToMenu}
+            onAddFriend={handleAddFriend}
           />
         );
       case GameState.FRIENDS:
