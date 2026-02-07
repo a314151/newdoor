@@ -36,7 +36,15 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     // 这里的设置对国内访问很重要，保持 Session 稳定
     persistSession: true,
     autoRefreshToken: true,
-  }
+  },
+  realtime: {
+    // 配置实时功能参数 - 使用正确的实时URL
+    params: {
+      apikey: supabaseKey,
+    },
+    // 显式设置实时选项
+    // socketUrl: supabaseUrl.replace('https://', 'wss://').replace('http://', 'ws://') + '/realtime/v1/websocket',
+  },
 });
 
 // Helper to check if supabase is configured
