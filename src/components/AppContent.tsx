@@ -64,6 +64,34 @@ const AppContent: React.FC = () => {
   const { handleLogout, handleHardReset, handleSaveConfig } = useUserManagement();
   const { handleGainXp, addToInventory, movePlayer, handleAttack } = useGameLogic();
 
+  // 用户故事和历史记录状态
+  const [stories, setStories] = React.useState<any[]>([]);
+  const [history, setHistory] = React.useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+
+  // 加载用户故事和历史记录
+  React.useEffect(() => {
+    if (currentUserId) {
+      const loadStoriesAndHistory = async () => {
+        setIsLoadingHistory(true);
+        try {
+          const { fetchFromCloud } = await import('../utils/cloudSyncUtils');
+          const savedData = await fetchFromCloud(currentUserId);
+          if (savedData && savedData.success && savedData.data) {
+            const { stories = [], history = [] } = savedData.data;
+            setStories(Array.isArray(stories) ? stories : []);
+            setHistory(Array.isArray(history) ? history : []);
+          }
+        } catch (error) {
+          console.error('Failed to load stories and history:', error);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      };
+      loadStoriesAndHistory();
+    }
+  }, [currentUserId]);
+
   // 加载排行榜数据
   React.useEffect(() => {
     if (gameState === GameState.LEADERBOARD) {
@@ -661,7 +689,7 @@ const AppContent: React.FC = () => {
           <MenuScreen 
             userProfile={userProfile}
             stats={stats}
-            stories={[]}
+            stories={stories}
             agentRank={agentRank}
             userEmail={userEmail}
             isSupabaseConfigured={true}
@@ -755,8 +783,8 @@ const AppContent: React.FC = () => {
       case GameState.HISTORY_VIEW:
         return (
           <HistoryScreen 
-            stories={[]} // TODO
-            history={[]} // TODO
+            stories={stories}
+            history={history}
             onBack={handleBackToMenu}
           />
         );
@@ -842,7 +870,7 @@ const AppContent: React.FC = () => {
           <MenuScreen 
             userProfile={userProfile}
             stats={stats}
-            stories={[]}
+            stories={stories}
             agentRank={agentRank}
             userEmail={userEmail}
             isSupabaseConfigured={true}
