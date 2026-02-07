@@ -68,6 +68,9 @@ const AppContent: React.FC = () => {
   const [stories, setStories] = React.useState<any[]>([]);
   const [history, setHistory] = React.useState<any[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = React.useState(false);
+  
+  // 背包状态
+  const [inventory, setInventory] = React.useState<any[]>([]);
 
   // 加载用户故事和历史记录
   React.useEffect(() => {
@@ -113,6 +116,22 @@ const AppContent: React.FC = () => {
       setHistory([]);
     }
   }, [currentUserId]);
+
+  // 加载背包数据
+  React.useEffect(() => {
+    const loadInventory = () => {
+      try {
+        const { loadLocalData } = require('../utils/storageUtils');
+        const localData = loadLocalData();
+        if (localData.inventory && Array.isArray(localData.inventory)) {
+          setInventory(localData.inventory);
+        }
+      } catch (error) {
+        console.error('Failed to load inventory:', error);
+      }
+    };
+    loadInventory();
+  }, []);
 
   // 加载排行榜数据
   React.useEffect(() => {
@@ -968,7 +987,7 @@ const AppContent: React.FC = () => {
       {showInventory && (
         <InventoryModal 
           onClose={() => setShowInventory(false)} 
-          inventory={[]} // TODO: Implement inventory
+          inventory={inventory}
           onUse={() => {}} // TODO: Implement use item
         />
       )}

@@ -137,7 +137,7 @@ const GameGrid: React.FC<GameGridProps> = ({ grid, player, theme, assets, onMove
       <div className="absolute -bottom-16 left-0 right-0 flex justify-between text-xs text-slate-400 px-2">
          <div>使用方向键移动</div>
          <div className={player.hasKey ? "text-yellow-400 font-bold" : "text-slate-600"}>
-            {player.hasKey ? `持有: ${theme.keyItemName}` : `寻找: ${theme.keyItemName}`}
+            {player.hasKey ? `持有: ${theme?.keyItemName || '钥匙'}` : `寻找: ${theme?.keyItemName || '钥匙'}`}
          </div>
       </div>
     </div>
