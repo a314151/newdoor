@@ -124,7 +124,7 @@ export const fetchAgentRank = async (userCreatedAt: string) => {
       if (error) {
         console.error('Error fetching agent rank via RPC:', error);
         // 如果 RPC 失败，尝试使用传统的 COUNT 查询
-        const { count, countError } = await supabase
+        const { count, error: countError } = await supabase
           .from('game_saves')
           .select('user_id', { count: 'exact', head: true })
           .lt('created_at', userCreatedAt);

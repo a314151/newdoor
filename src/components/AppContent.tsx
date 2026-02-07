@@ -100,15 +100,44 @@ const AppContent: React.FC = () => {
     }
   }, [gameState, currentUserId, setFriends, setPendingRequests]);
 
-  // 加载邮件数据
+  // 加载邮件数据（从本地存储和通知合并）
   React.useEffect(() => {
     if (gameState === GameState.EMAIL && currentUserId) {
       const loadEmails = async () => {
         try {
-          const { loadEmails } = await import('../utils/storageUtils');
-          const emailsData = loadEmails(currentUserId);
-          setEmails(emailsData);
-          setUnreadEmailCount(emailsData.filter((e: any) => !e.isRead).length);
+          // 1. 从本地存储加载邮件
+          const { loadEmails: loadLocalEmails } = await import('../utils/storageUtils');
+          const localEmails = loadLocalEmails(currentUserId);
+          
+          // 2. 从通知加载邮件
+          const { default: NotificationService } = await import('../../services/notificationService');
+          const notifications = await NotificationService.getNotifications(currentUserId);
+          
+          // 3. 将通知转换为邮件格式
+          const notificationEmails = notifications.map(notification => ({
+            id: `notification_${notification.id}`,
+            subject: notification.message || '系统通知',
+            content: notification.content || notification.data?.content || '',
+            attachments: notification.data?.attachments || [],
+            isRead: notification.read,
+            isClaimed: false,
+            timestamp: new Date(notification.created_at).getTime(),
+            sender: '系统',
+            friendRequest: undefined
+          }));
+          
+          // 4. 合并邮件，去重（优先保留本地邮件）
+          const emailMap = new Map();
+          // 先添加通知邮件
+          notificationEmails.forEach(email => emailMap.set(email.id, email));
+          // 再添加本地邮件（本地邮件可能覆盖通知邮件）
+          localEmails.forEach(email => emailMap.set(email.id, email));
+          
+          const mergedEmails = Array.from(emailMap.values())
+            .sort((a, b) => b.timestamp - a.timestamp);
+          
+          setEmails(mergedEmails);
+          setUnreadEmailCount(mergedEmails.filter(e => !e.isRead).length);
         } catch (error) {
           console.error('Failed to load emails:', error);
         }
@@ -117,7 +146,7 @@ const AppContent: React.FC = () => {
     }
   }, [gameState, currentUserId, setEmails, setUnreadEmailCount]);
 
-  // 加载通知数据
+  // 加载通知数据并更新邮件状态
   React.useEffect(() => {
     if (currentUserId) {
       const loadNotifications = async () => {
@@ -126,13 +155,45 @@ const AppContent: React.FC = () => {
           const notifications = await NotificationService.getNotifications(currentUserId);
           setNotifications(notifications);
           setUnreadNotificationCount(notifications.filter(n => !n.read).length);
+          
+          // 同时更新邮件状态
+          try {
+            const { loadEmails: loadLocalEmails } = await import('../utils/storageUtils');
+            const localEmails = loadLocalEmails(currentUserId);
+            
+            // 将通知转换为邮件格式
+            const notificationEmails = notifications.map(notification => ({
+              id: `notification_${notification.id}`,
+              subject: notification.message || '系统通知',
+              content: notification.content || notification.data?.content || '',
+              attachments: notification.data?.attachments || [],
+              isRead: notification.read,
+              isClaimed: false,
+              timestamp: new Date(notification.created_at).getTime(),
+              sender: '系统',
+              friendRequest: undefined
+            }));
+            
+            // 合并邮件，去重（优先保留本地邮件）
+            const emailMap = new Map();
+            notificationEmails.forEach(email => emailMap.set(email.id, email));
+            localEmails.forEach(email => emailMap.set(email.id, email));
+            
+            const mergedEmails = Array.from(emailMap.values())
+              .sort((a, b) => b.timestamp - a.timestamp);
+            
+            setEmails(mergedEmails);
+            setUnreadEmailCount(mergedEmails.filter(e => !e.isRead).length);
+          } catch (error) {
+            console.error('Failed to update emails from notifications:', error);
+          }
         } catch (error) {
           console.error('Failed to load notifications:', error);
         }
       };
       loadNotifications();
     }
-  }, [currentUserId, setNotifications, setUnreadNotificationCount]);
+  }, [currentUserId, setNotifications, setUnreadNotificationCount, setEmails, setUnreadEmailCount]);
 
   // 订阅通知变化
   React.useEffect(() => {
@@ -142,9 +203,41 @@ const AppContent: React.FC = () => {
 
     const setupSubscription = async () => {
       const { default: NotificationService } = await import('../../services/notificationService');
-      unsubscribe = NotificationService.subscribeToNotifications(currentUserId, (notifications) => {
+      unsubscribe = NotificationService.subscribeToNotifications(currentUserId, async (notifications) => {
         setNotifications(notifications);
         setUnreadNotificationCount(notifications.filter(n => !n.read).length);
+        
+        // 同时更新邮件状态
+        try {
+          const { loadEmails: loadLocalEmails } = await import('../utils/storageUtils');
+          const localEmails = loadLocalEmails(currentUserId);
+          
+          // 将通知转换为邮件格式
+          const notificationEmails = notifications.map(notification => ({
+            id: `notification_${notification.id}`,
+            subject: notification.message || '系统通知',
+            content: notification.content || notification.data?.content || '',
+            attachments: notification.data?.attachments || [],
+            isRead: notification.read,
+            isClaimed: false,
+            timestamp: new Date(notification.created_at).getTime(),
+            sender: '系统',
+            friendRequest: undefined
+          }));
+          
+          // 合并邮件，去重（优先保留本地邮件）
+          const emailMap = new Map();
+          notificationEmails.forEach(email => emailMap.set(email.id, email));
+          localEmails.forEach(email => emailMap.set(email.id, email));
+          
+          const mergedEmails = Array.from(emailMap.values())
+            .sort((a, b) => b.timestamp - a.timestamp);
+          
+          setEmails(mergedEmails);
+          setUnreadEmailCount(mergedEmails.filter(e => !e.isRead).length);
+        } catch (error) {
+          console.error('Failed to update emails from notifications:', error);
+        }
       });
     };
 
@@ -155,7 +248,7 @@ const AppContent: React.FC = () => {
         unsubscribe();
       }
     };
-  }, [currentUserId, setNotifications, setUnreadNotificationCount]);
+  }, [currentUserId, setNotifications, setUnreadNotificationCount, setEmails, setUnreadEmailCount]);
 
   // 加载公告数据
   React.useEffect(() => {
